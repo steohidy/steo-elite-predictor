@@ -12,12 +12,12 @@ datasource db {
 
 // Table des pronostics
 model Prediction {
-  id              String   @id @default(cuid())
-  matchId         String   @unique
+  id              String    @id @default(cuid())
+  matchId         String    @unique
   homeTeam        String
   awayTeam        String
   league          String
-  sport           String   @default("Foot")
+  sport           String    @default("Foot")
   matchDate       DateTime
   oddsHome        Float
   oddsDraw        Float?
@@ -25,23 +25,23 @@ model Prediction {
   predictedResult String
   predictedGoals  String?
   predictedCards  String?
-  confidence      String   @default("medium")
-  riskPercentage  Int      @default(50)
+  confidence      String    @default("medium")
+  riskPercentage  Int       @default(50)
 
   // Résultats (null si match non terminé)
   homeScore       Int?
   awayScore       Int?
-  totalGoals      Int?      // Total des buts/points marqués
+  totalGoals      Int?
   actualResult    String?
   resultMatch     Boolean?
   goalsMatch      Boolean?
   cardsMatch      Boolean?
 
   // Statut
-  status          String   @default("pending") // pending, completed
+  status          String    @default("pending")
 
   // Métadonnées
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
   checkedAt       DateTime?
   signature       String?
 
@@ -54,13 +54,13 @@ model Prediction {
 
 // Table pour les statistiques de bankroll
 model BankrollStats {
-  id              String   @id @default(cuid())
-  date            DateTime @default(now())
+  id              String    @id @default(cuid())
+  date            DateTime  @default(now())
   balance         Float
-  totalBets       Int      @default(0)
-  wins            Int      @default(0)
-  losses          Int      @default(0)
-  profitLoss      Float    @default(0)
+  totalBets       Int       @default(0)
+  wins            Int       @default(0)
+  losses          Int       @default(0)
+  profitLoss      Float     @default(0)
 
   @@index([date])
   @@map("bankroll_stats")
@@ -68,11 +68,11 @@ model BankrollStats {
 
 // Table pour les utilisateurs
 model User {
-  id              String   @id @default(cuid())
-  username        String   @unique
+  id              String    @id @default(cuid())
+  username        String    @unique
   passwordHash    String
-  role            String   @default("user")
-  createdAt       DateTime @default(now())
+  role            String    @default("user")
+  createdAt       DateTime  @default(now())
   lastLogin       DateTime?
 
   @@index([username])

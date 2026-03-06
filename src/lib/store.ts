@@ -5,43 +5,14 @@
  */
 
 import prisma from './db';
+import { Prediction, BankrollStats, User } from '../generated';
 import crypto from 'crypto';
 
 // Secret pour la validation des données (sécurité)
 const DATA_SECRET = process.env.DATA_SECRET || 'steo-elite-secret-2026';
 
-// Structure des données correspondant au schéma Prisma
-interface Prediction {
-  id: string;
-  matchId: string;
-  homeTeam: string;
-  awayTeam: string;
-  league: string;
-  sport: string;
-  matchDate: Date;
-  oddsHome: number;
-  oddsDraw: number | null;
-  oddsAway: number;
-  predictedResult: string;
-  predictedGoals?: string | null;
-  predictedCards?: string | null;
-  confidence: string;
-  riskPercentage: number;
-  homeScore?: number | null;
-  awayScore?: number | null;
-  totalGoals?: number | null;
-  actualResult?: string | null;
-  status: string;
-  resultMatch?: boolean | null;
-  goalsMatch?: boolean | null;
-  cardsMatch?: boolean | null;
-  createdAt: Date;
-  checkedAt?: Date | null;
-  signature?: string | null;
-}
-
 // Type pour l'entrée (accepte string ou Date pour matchDate)
-type PredictionInput = Omit<Prediction, 'id' | 'createdAt' | 'status' | 'signature' | 'matchDate'> & {
+type PredictionInput = Omit<Prediction, 'id' | 'createdAt' | 'status' | 'checkedAt' | 'signature'> & {
   matchDate: string | Date;
 };
 
@@ -94,13 +65,6 @@ interface SportStats {
 function generateSignature(matchId: string, homeTeam: string, awayTeam: string, predictedResult: string): string {
   const payload = `${matchId}|${homeTeam}|${awayTeam}|${predictedResult}|${DATA_SECRET}`;
   return crypto.createHash('sha256').update(payload).digest('hex').substring(0, 16);
-}
-
-// Vérifier la signature d'un pronostic
-function verifySignature(prediction: Prediction): boolean {
-  if (!prediction.signature) return true; // Rétrocompatibilité
-  const expected = generateSignature(prediction.matchId, prediction.homeTeam, prediction.awayTeam, prediction.predictedResult);
-  return prediction.signature === expected;
 }
 
 // Obtenir le début de la journée (minuit)
@@ -219,68 +183,83 @@ function calculateRiskStats(predictions: Prediction[]): RiskCategoryStats {
 export const PredictionStore = {
   // Récupérer tous les pronostics
   async getAll(): Promise<Prediction[]> {
-    const results = await prisma.prediction.findMany({
-      orderBy: { matchDate: 'desc' }
-    });
-    return results as Prediction[];
+    try {
+      return await prisma.prediction.findMany({
+        orderBy: { matchDate: 'desc' }
+      });
+    } catch (error) {
+      console.error('Erreur getAll predictions:', error);
+      return [];
+    }
   },
 
   // Récupérer les pronostics en attente
   async getPending(): Promise<Prediction[]> {
-    const results = await prisma.prediction.findMany({
-      where: { status: 'pending' },
-      orderBy: { matchDate: 'asc' }
-    });
-    return results as Prediction[];
+    try {
+      return await prisma.prediction.findMany({
+        where: { status: 'pending' },
+        orderBy: { matchDate: 'asc' }
+      });
+    } catch (error) {
+      console.error('Erreur getPending predictions:', error);
+      return [];
+    }
   },
 
   // Récupérer les pronostics terminés
   async getCompleted(): Promise<Prediction[]> {
-    const results = await prisma.prediction.findMany({
-      where: { status: 'completed' },
-      orderBy: { matchDate: 'desc' }
-    });
-    return results as Prediction[];
+    try {
+      return await prisma.prediction.findMany({
+        where: { status: 'completed' },
+        orderBy: { matchDate: 'desc' }
+      });
+    } catch (error) {
+      console.error('Erreur getCompleted predictions:', error);
+      return [];
+    }
   },
 
   // Ajouter un pronostic
-  async add(data: PredictionInput): Promise<Prediction> {
-    // Vérifier si déjà existant
-    const exists = await prisma.prediction.findUnique({
-      where: { matchId: data.matchId }
-    });
+  async add(data: PredictionInput): Promise<Prediction | null> {
+    try {
+      // Vérifier si déjà existant
+      const exists = await prisma.prediction.findUnique({
+        where: { matchId: data.matchId }
+      });
 
-    if (exists) return exists as Prediction;
+      if (exists) return exists;
 
-    const signature = generateSignature(
-      data.matchId,
-      data.homeTeam,
-      data.awayTeam,
-      data.predictedResult
-    );
+      const signature = generateSignature(
+        data.matchId,
+        data.homeTeam,
+        data.awayTeam,
+        data.predictedResult
+      );
 
-    const prediction = await prisma.prediction.create({
-      data: {
-        matchId: data.matchId,
-        homeTeam: data.homeTeam,
-        awayTeam: data.awayTeam,
-        league: data.league,
-        sport: data.sport,
-        matchDate: new Date(data.matchDate),
-        oddsHome: data.oddsHome,
-        oddsDraw: data.oddsDraw,
-        oddsAway: data.oddsAway,
-        predictedResult: data.predictedResult,
-        predictedGoals: data.predictedGoals,
-        predictedCards: data.predictedCards,
-        confidence: data.confidence,
-        riskPercentage: data.riskPercentage,
-        status: 'pending',
-        signature
-      }
-    });
-
-    return prediction as Prediction;
+      return await prisma.prediction.create({
+        data: {
+          matchId: data.matchId,
+          homeTeam: data.homeTeam,
+          awayTeam: data.awayTeam,
+          league: data.league,
+          sport: data.sport || 'Foot',
+          matchDate: new Date(data.matchDate),
+          oddsHome: data.oddsHome,
+          oddsDraw: data.oddsDraw,
+          oddsAway: data.oddsAway,
+          predictedResult: data.predictedResult,
+          predictedGoals: data.predictedGoals,
+          predictedCards: data.predictedCards,
+          confidence: data.confidence || 'medium',
+          riskPercentage: data.riskPercentage || 50,
+          status: 'pending',
+          signature
+        }
+      });
+    } catch (error) {
+      console.error('Erreur add prediction:', error);
+      return null;
+    }
   },
 
   // Ajouter plusieurs pronostics
@@ -288,39 +267,43 @@ export const PredictionStore = {
     let added = 0;
 
     for (const data of predictions) {
-      const exists = await prisma.prediction.findUnique({
-        where: { matchId: data.matchId }
-      });
-
-      if (!exists) {
-        const signature = generateSignature(
-          data.matchId,
-          data.homeTeam,
-          data.awayTeam,
-          data.predictedResult
-        );
-
-        await prisma.prediction.create({
-          data: {
-            matchId: data.matchId,
-            homeTeam: data.homeTeam,
-            awayTeam: data.awayTeam,
-            league: data.league,
-            sport: data.sport,
-            matchDate: new Date(data.matchDate),
-            oddsHome: data.oddsHome,
-            oddsDraw: data.oddsDraw,
-            oddsAway: data.oddsAway,
-            predictedResult: data.predictedResult,
-            predictedGoals: data.predictedGoals,
-            predictedCards: data.predictedCards,
-            confidence: data.confidence,
-            riskPercentage: data.riskPercentage,
-            status: 'pending',
-            signature
-          }
+      try {
+        const exists = await prisma.prediction.findUnique({
+          where: { matchId: data.matchId }
         });
-        added++;
+
+        if (!exists) {
+          const signature = generateSignature(
+            data.matchId,
+            data.homeTeam,
+            data.awayTeam,
+            data.predictedResult
+          );
+
+          await prisma.prediction.create({
+            data: {
+              matchId: data.matchId,
+              homeTeam: data.homeTeam,
+              awayTeam: data.awayTeam,
+              league: data.league,
+              sport: data.sport || 'Foot',
+              matchDate: new Date(data.matchDate),
+              oddsHome: data.oddsHome,
+              oddsDraw: data.oddsDraw,
+              oddsAway: data.oddsAway,
+              predictedResult: data.predictedResult,
+              predictedGoals: data.predictedGoals,
+              predictedCards: data.predictedCards,
+              confidence: data.confidence || 'medium',
+              riskPercentage: data.riskPercentage || 50,
+              status: 'pending',
+              signature
+            }
+          });
+          added++;
+        }
+      } catch (err) {
+        console.error(`Erreur addMany pour ${data.matchId}:`, err);
       }
     }
 
@@ -420,7 +403,7 @@ export const PredictionStore = {
   async getStatsBySport(): Promise<{ foot: SportStats; basket: SportStats }> {
     const predictions = await this.getAll();
 
-    const footPredictions = predictions.filter(p => p.sport === 'Foot');
+    const footPredictions = predictions.filter(p => p.sport === 'Foot' || !p.sport);
     const basketPredictions = predictions.filter(p => p.sport === 'Basket');
 
     const calcStats = (preds: Prediction[]): SportStats => {
@@ -505,8 +488,11 @@ export const PredictionStore = {
     let invalidCount = 0;
 
     for (const p of predictions) {
-      if (p.status === 'completed' && !verifySignature(p)) {
-        invalidCount++;
+      if (p.status === 'completed' && p.signature) {
+        const expected = generateSignature(p.matchId, p.homeTeam, p.awayTeam, p.predictedResult);
+        if (p.signature !== expected) {
+          invalidCount++;
+        }
       }
     }
 
