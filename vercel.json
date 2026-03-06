@@ -17,5 +17,19 @@
         { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
       ]
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron?task=fetch_matches",
+      "schedule": "0 8,14,20 * * *"
+    },
+    {
+      "path": "/api/cron?task=verify_results",
+      "schedule": "30 23 * * *"
+    },
+    {
+      "path": "/api/cron?task=cleanup",
+      "schedule": "0 3 1 * *"
+    }
   ]
 }
