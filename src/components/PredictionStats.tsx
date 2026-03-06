@@ -85,21 +85,7 @@ export function PredictionStats() {
     }
   }, []);
 
-  // Charger les données de démo si pas de stats
-  const loadDemoData = async () => {
-    setRefreshing(true);
-    try {
-      await fetch('/api/demo', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'init_demo' })
-      });
-      await fetchStats();
-    } catch (error) {
-      console.error('Error loading demo:', error);
-      setRefreshing(false);
-    }
-  };
+
 
   const handleCheckResults = async () => {
     setRefreshing(true);
@@ -455,19 +441,9 @@ export function PredictionStats() {
             <div className="text-center py-8">
               <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
               <p className="text-muted-foreground">Aucun pronostic enregistré</p>
-              <p className="text-sm text-muted-foreground mt-1 mb-4">
+              <p className="text-sm text-muted-foreground mt-1">
                 Les statistiques apparaîtront automatiquement après les matchs
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadDemoData}
-                disabled={refreshing}
-                className="text-purple-500 border-purple-500/30 hover:bg-purple-500/10"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
-                Charger données de démo
-              </Button>
             </div>
           )}
 
