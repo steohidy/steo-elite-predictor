@@ -31,6 +31,7 @@ model Prediction {
   // Résultats (null si match non terminé)
   homeScore       Int?
   awayScore       Int?
+  totalGoals      Int?      // Total des buts/points marqués
   actualResult    String?
   resultMatch     Boolean?
   goalsMatch      Boolean?
