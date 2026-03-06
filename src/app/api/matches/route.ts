@@ -143,7 +143,8 @@ export async function GET() {
               predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
               predictedGoals: match.goalsPrediction?.prediction,
               confidence: match.insight?.confidence || 'medium',
-              riskPercentage: match.insight?.riskPercentage || 50
+              riskPercentage: match.insight?.riskPercentage || 50,
+              sources: match.sources || ['API']
             });
           } catch (err) {
             // Ignorer si déjà existant
