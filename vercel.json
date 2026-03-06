@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "next build",
+  "buildCommand": "prisma generate && next build",
   "installCommand": "bun install",
   "framework": "nextjs",
   "regions": ["cdg1"],
@@ -20,16 +20,8 @@
   ],
   "crons": [
     {
-      "path": "/api/cron?task=fetch_matches",
-      "schedule": "0 8,14,20 * * *"
-    },
-    {
-      "path": "/api/cron?task=verify_results",
-      "schedule": "30 23 * * *"
-    },
-    {
-      "path": "/api/cron?task=cleanup",
-      "schedule": "0 3 1 * *"
+      "path": "/api/cron?task=all",
+      "schedule": "0 20 * * *"
     }
   ]
 }
