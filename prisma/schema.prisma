@@ -48,6 +48,7 @@ model Prediction {
   @@index([status])
   @@index([sport])
   @@index([riskPercentage])
+  @@map("predictions")
 }
 
 // Table pour les statistiques de bankroll
@@ -61,6 +62,7 @@ model BankrollStats {
   profitLoss      Float    @default(0)
 
   @@index([date])
+  @@map("bankroll_stats")
 }
 
 // Table pour les utilisateurs
@@ -73,4 +75,5 @@ model User {
   lastLogin       DateTime?
 
   @@index([username])
+  @@map("users")
 }
