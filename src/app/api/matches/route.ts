@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import PredictionStore from '@/lib/store';
 
 // Type local pour éviter les imports problématiques
 interface MatchData {
@@ -55,6 +56,37 @@ let lastFetchTime = 0;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
+ * Vérifie automatiquement les résultats des matchs terminés
+ * Appelé avant de retourner les matchs
+ */
+async function autoVerifyResults(): Promise<void> {
+  try {
+    const pendingPredictions = PredictionStore.getPending();
+    
+    if (pendingPredictions.length === 0) {
+      return;
+    }
+    
+    // Appeler l'API de vérification des résultats en interne
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    // Vérifier les résultats de manière asynchrone sans bloquer
+    fetch(`${baseUrl}/api/results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check_results' })
+    }).catch(err => {
+      console.log('⚠️ Auto-vérification des résultats échouée:', err.message);
+    });
+    
+  } catch (error) {
+    console.error('⚠️ Erreur auto-vérification:', error);
+  }
+}
+
+/**
  * GET - Récupérer les matchs avec croisement multi-sources
  * DONNÉES RÉELLES UNIQUEMENT
  * GESTION INTELLIGENTE DU TIMING
@@ -69,6 +101,10 @@ export async function GET() {
       // Mais mettre à jour le timing (car l'heure change)
       const { getTimingInfo } = await import('@/lib/crossValidation');
       const currentTiming = getTimingInfo();
+      
+      // Lancer la vérification des résultats en arrière-plan
+      autoVerifyResults();
+      
       return NextResponse.json({
         ...cachedData,
         timing: currentTiming
@@ -83,6 +119,43 @@ export async function GET() {
     if (result.matches && result.matches.length > 0) {
       cachedData = result;
       lastFetchTime = now;
+      
+      // 🆕 Sauvegarder automatiquement les pronostics à faible risque
+      const safeMatches = result.matches.filter(
+        (m: MatchData) => m.insight && m.insight.riskPercentage <= 40 && m.status === 'upcoming'
+      );
+      
+      if (safeMatches.length > 0) {
+        console.log(`💾 Sauvegarde automatique de ${safeMatches.length} pronostics sûrs...`);
+        
+        for (const match of safeMatches) {
+          try {
+            PredictionStore.add({
+              matchId: match.id,
+              homeTeam: match.homeTeam,
+              awayTeam: match.awayTeam,
+              league: match.league || 'Unknown',
+              sport: match.sport || 'Foot',
+              matchDate: match.date,
+              oddsHome: match.oddsHome,
+              oddsDraw: match.oddsDraw,
+              oddsAway: match.oddsAway,
+              predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
+              predictedGoals: match.goalsPrediction?.prediction,
+              confidence: match.insight?.confidence || 'medium',
+              riskPercentage: match.insight?.riskPercentage || 50
+            });
+          } catch (err) {
+            // Ignorer si déjà existant
+            console.log(`⚠️ Pronostic ${match.id} déjà existant ou erreur`);
+          }
+        }
+        console.log(`✅ ${safeMatches.length} pronostics sauvegardés automatiquement`);
+      }
+      
+      // Lancer la vérification des résultats en arrière-plan
+      autoVerifyResults();
+      
       return NextResponse.json(result);
     }
     

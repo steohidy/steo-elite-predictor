@@ -7,6 +7,7 @@ import { Multisports } from '@/components/Multisports';
 import { BankrollManager } from '@/components/BankrollManager';
 import { LinkAnalyzer } from '@/components/LinkAnalyzer';
 import { ApiStatus } from '@/components/ApiStatus';
+import { PredictionStats } from '@/components/PredictionStats';
 import { Footer } from '@/components/Footer';
 import { Crown, Shield, Sparkles, Trophy } from 'lucide-react';
 
@@ -67,6 +68,7 @@ export function MainApp({ onLogout }: MainAppProps) {
           <SafesDuJour />
           <AntiTrap />
           <Multisports />
+          <PredictionStats />
           <BankrollManager />
           <LinkAnalyzer />
         </div>

@@ -12,6 +12,7 @@
 
 import { fetchRealNBAGames, getTodayNBASchedule, getNBAPredictions } from './nbaData';
 import { getAllFallbackMatches, isFallbackAvailable, FallbackMatch } from './fallbackSports';
+import PredictionStore from './store';
 
 interface CrossValidatedMatch {
   id: string;
@@ -1477,6 +1478,35 @@ export async function getCrossValidatedMatches(): Promise<{
   // Stats
   const safes = distributedMatches.filter(m => m.insight.riskPercentage <= 40).length;
   const valueBets = distributedMatches.filter(m => m.insight.valueBetDetected).length;
+  
+  // ===== AUTO-SAVE PREDICTIONS TO PREDICTIONSTORE =====
+  // Sauvegarder automatiquement les pronostics à faible risque
+  try {
+    const lowRiskMatches = distributedMatches.filter(m => m.insight.riskPercentage <= 40);
+    
+    const predictionsToSave = lowRiskMatches.map(match => ({
+      matchId: match.id,
+      homeTeam: match.homeTeam,
+      awayTeam: match.awayTeam,
+      league: match.league,
+      sport: match.sport,
+      matchDate: match.date,
+      oddsHome: match.oddsHome,
+      oddsDraw: match.oddsDraw,
+      oddsAway: match.oddsAway,
+      predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
+      predictedGoals: match.goalsPrediction?.prediction,
+      confidence: match.insight.confidence,
+      riskPercentage: match.insight.riskPercentage
+    }));
+    
+    if (predictionsToSave.length > 0) {
+      const saved = PredictionStore.addMany(predictionsToSave);
+      console.log(`💾 ${saved} pronostics sauvegardés automatiquement (risque ≤ 40%)`);
+    }
+  } catch (error) {
+    console.error('⚠️ Erreur sauvegarde pronostics:', error);
+  }
   
   return {
     matches: distributedMatches,
