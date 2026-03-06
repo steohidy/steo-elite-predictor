@@ -23,14 +23,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'high',
     riskPercentage: 25, // Sûr
-    // Résultat: PSG 4-1 Lille ✅
     homeScore: 4,
     awayScore: 1,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T22:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_pl_1',
@@ -46,14 +44,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over1.5',
     confidence: 'high',
     riskPercentage: 28, // Sûr
-    // Résultat: Man Utd 3-1 Everton ✅
     homeScore: 3,
     awayScore: 1,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T17:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_liga_1',
@@ -69,14 +65,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'high',
     riskPercentage: 22, // Sûr
-    // Résultat: Real 3-0 Girona ✅
     homeScore: 3,
     awayScore: 0,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T23:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_serie_1',
@@ -92,14 +86,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over1.5',
     confidence: 'medium',
     riskPercentage: 32, // Modéré
-    // Résultat: Juve 2-0 Verona ✅
     homeScore: 2,
     awayScore: 0,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T20:30:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_bundes_1',
@@ -115,14 +107,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'high',
     riskPercentage: 18, // Très Sûr
-    // Résultat: Bayern 3-1 Mainz ✅
     homeScore: 3,
     awayScore: 1,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T22:30:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_pl_2',
@@ -138,14 +128,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'medium',
     riskPercentage: 38, // Modéré
-    // Résultat: Liverpool 2-2 Newcastle ❌ (match nul)
     homeScore: 2,
     awayScore: 2,
     actualResult: 'draw',
     resultMatch: false,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T22:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_liga_2',
@@ -161,14 +149,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'under2.5',
     confidence: 'low',
     riskPercentage: 55, // Risqué
-    // Résultat: Atletico 0-1 Bilbao ❌
     homeScore: 0,
     awayScore: 1,
     actualResult: 'away',
     resultMatch: false,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T20:30:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-04_ligue1_2',
@@ -184,14 +170,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over1.5',
     confidence: 'medium',
     riskPercentage: 42, // Modéré
-    // Résultat: OM 2-0 Nantes ✅
     homeScore: 2,
     awayScore: 0,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-04T19:00:00Z'
+    status: 'completed' as const
   },
   // Match du 5 mars
   {
@@ -208,14 +192,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'low',
     riskPercentage: 52, // Risqué
-    // Résultat: Real 3-2 Man City ✅
     homeScore: 3,
     awayScore: 2,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-05T23:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-05_cl_2',
@@ -231,14 +213,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over2.5',
     confidence: 'medium',
     riskPercentage: 35, // Modéré
-    // Résultat: Bayern 1-0 PSG ❌ (under)
     homeScore: 1,
     awayScore: 0,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: false,
-    status: 'completed' as const,
-    checkedAt: '2026-03-05T23:00:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-05_nba_1',
@@ -254,14 +234,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over220.5',
     confidence: 'medium',
     riskPercentage: 40, // Modéré
-    // Résultat: Lakers 118-125 Warriors ✅
     homeScore: 118,
     awayScore: 125,
     actualResult: 'away',
     resultMatch: true,
     goalsMatch: true,
-    status: 'completed' as const,
-    checkedAt: '2026-03-05T04:30:00Z'
+    status: 'completed' as const
   },
   {
     matchId: 'demo_2026-03-05_nba_2',
@@ -277,14 +255,12 @@ const DEMO_PREDICTIONS = [
     predictedGoals: 'over215.5',
     confidence: 'high',
     riskPercentage: 28, // Sûr
-    // Résultat: Celtics 112-98 Heat ✅
     homeScore: 112,
     awayScore: 98,
     actualResult: 'home',
     resultMatch: true,
     goalsMatch: false,
-    status: 'completed' as const,
-    checkedAt: '2026-03-05T03:30:00Z'
+    status: 'completed' as const
   }
 ];
 
@@ -295,7 +271,7 @@ export async function POST(request: Request) {
 
     // Initialiser les données de démo
     if (action === 'init_demo') {
-      const store = PredictionStore.getAll();
+      const store = await PredictionStore.getAll();
 
       // Ne pas écraser les données existantes
       const existingIds = store.map(p => p.matchId);
@@ -305,9 +281,24 @@ export async function POST(request: Request) {
       let added = 0;
       for (const pred of newPredictions) {
         try {
-          PredictionStore.add(pred);
+          await PredictionStore.add({
+            matchId: pred.matchId,
+            homeTeam: pred.homeTeam,
+            awayTeam: pred.awayTeam,
+            league: pred.league,
+            sport: pred.sport,
+            matchDate: pred.matchDate,
+            oddsHome: pred.oddsHome,
+            oddsDraw: pred.oddsDraw,
+            oddsAway: pred.oddsAway,
+            predictedResult: pred.predictedResult,
+            predictedGoals: pred.predictedGoals,
+            confidence: pred.confidence,
+            riskPercentage: pred.riskPercentage
+          });
+
           if (pred.status === 'completed') {
-            PredictionStore.complete(pred.matchId, {
+            await PredictionStore.complete(pred.matchId, {
               homeScore: pred.homeScore!,
               awayScore: pred.awayScore!,
               actualResult: pred.actualResult!,
@@ -321,11 +312,13 @@ export async function POST(request: Request) {
         }
       }
 
+      const total = await PredictionStore.getAll();
+
       return NextResponse.json({
         success: true,
         message: `${added} pronostics de démonstration ajoutés`,
         added,
-        total: PredictionStore.getAll().length
+        total: total.length
       });
     }
 
@@ -338,7 +331,7 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
-  const stats = PredictionStore.getCompleteStats();
+  const stats = await PredictionStore.getCompleteStats();
 
   return NextResponse.json({
     message: 'API de démonstration - Utilisez POST avec action=init_demo',

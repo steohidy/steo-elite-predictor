@@ -58,3 +58,5 @@ download/
 
 # Backup folders
 backup_*/
+
+/src/generated/

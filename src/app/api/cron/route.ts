@@ -49,7 +49,7 @@ async function fetchMatches(): Promise<{ success: boolean; message: string; coun
     let savedCount = 0;
     for (const match of safeMatches) {
       try {
-        PredictionStore.add({
+        await PredictionStore.add({
           matchId: match.id,
           homeTeam: match.homeTeam,
           awayTeam: match.awayTeam,
@@ -113,7 +113,7 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
       (m: any) => m.status === 'FINISHED' || m.status === 'FT'
     );
 
-    const pendingPredictions = PredictionStore.getPending();
+    const pendingPredictions = await PredictionStore.getPending();
 
     // Fonction de normalisation des noms d'équipes
     const normalizeName = (name: string): string => {
@@ -166,7 +166,7 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
             }
           }
 
-          PredictionStore.complete(prediction.matchId, {
+          await PredictionStore.complete(prediction.matchId, {
             homeScore,
             awayScore,
             actualResult,
@@ -202,7 +202,7 @@ async function cleanup(): Promise<{ success: boolean; message: string; removed: 
   try {
     console.log('🧹 [CRON] Nettoyage des anciennes données...');
 
-    const removed = PredictionStore.cleanup();
+    const removed = await PredictionStore.cleanup();
 
     console.log(`✅ [CRON] ${removed} anciens pronostics supprimés`);
     return { success: true, message: `${removed} pronostics supprimés`, removed };

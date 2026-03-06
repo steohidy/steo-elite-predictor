@@ -61,7 +61,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
  */
 async function autoVerifyResults(): Promise<void> {
   try {
-    const pendingPredictions = PredictionStore.getPending();
+    const pendingPredictions = await PredictionStore.getPending();
     
     if (pendingPredictions.length === 0) {
       return;
@@ -130,7 +130,7 @@ export async function GET() {
         
         for (const match of safeMatches) {
           try {
-            PredictionStore.add({
+            await PredictionStore.add({
               matchId: match.id,
               homeTeam: match.homeTeam,
               awayTeam: match.awayTeam,
