@@ -10,7 +10,7 @@ import crypto from 'crypto';
 // Secret pour la validation des données (sécurité)
 const DATA_SECRET = process.env.DATA_SECRET || 'steo-elite-secret-2026';
 
-// Structure des données
+// Structure des données correspondant au schéma Prisma
 interface Prediction {
   id: string;
   matchId: string;
@@ -29,6 +29,7 @@ interface Prediction {
   riskPercentage: number;
   homeScore?: number | null;
   awayScore?: number | null;
+  totalGoals?: number | null;
   actualResult?: string | null;
   status: string;
   resultMatch?: boolean | null;
