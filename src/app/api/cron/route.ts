@@ -55,7 +55,7 @@ async function fetchMatches(): Promise<{ success: boolean; message: string; coun
           awayTeam: match.awayTeam,
           league: match.league || 'Unknown',
           sport: match.sport || 'Foot',
-          matchDate: match.date,
+          matchDate: new Date(match.date),
           oddsHome: match.oddsHome,
           oddsDraw: match.oddsDraw,
           oddsAway: match.oddsAway,
