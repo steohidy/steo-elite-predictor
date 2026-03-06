@@ -39,6 +39,11 @@ interface Prediction {
   signature?: string | null;
 }
 
+// Type pour l'entrée (accepte string ou Date pour matchDate)
+type PredictionInput = Omit<Prediction, 'id' | 'createdAt' | 'status' | 'signature' | 'matchDate'> & {
+  matchDate: string | Date;
+};
+
 // Statistiques détaillées
 interface DetailedStats {
   total: number;
@@ -238,7 +243,7 @@ export const PredictionStore = {
   },
 
   // Ajouter un pronostic
-  async add(data: Omit<Prediction, 'id' | 'createdAt' | 'status' | 'signature'>): Promise<Prediction> {
+  async add(data: PredictionInput): Promise<Prediction> {
     // Vérifier si déjà existant
     const exists = await prisma.prediction.findUnique({
       where: { matchId: data.matchId }
@@ -278,7 +283,7 @@ export const PredictionStore = {
   },
 
   // Ajouter plusieurs pronostics
-  async addMany(predictions: Omit<Prediction, 'id' | 'createdAt' | 'status' | 'signature'>[]): Promise<number> {
+  async addMany(predictions: PredictionInput[]): Promise<number> {
     let added = 0;
 
     for (const data of predictions) {
