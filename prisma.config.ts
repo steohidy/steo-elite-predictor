@@ -8,6 +8,7 @@ export default defineConfig({
     path: "prisma/migrations",
   },
   datasource: {
-    url: process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
+    // Utilise les variables Vercel/Supabase
+    url: process.env["POSTGRES_URL_NON_POOLING"] || process.env["DIRECT_URL"] || process.env["DATABASE_URL"],
   },
 });
