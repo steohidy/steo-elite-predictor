@@ -78,6 +78,43 @@ interface AllStats {
   overall: PeriodStats;
 }
 
+// Stats par catégorie de risque
+interface RiskCategoryStats {
+  total: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number;
+}
+
+// Stats par sport
+interface SportStats {
+  total: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number;
+  riskCategories?: {
+    sure: RiskCategoryStats;      // ≤30%
+    modere: RiskCategoryStats;    // 31-50%
+    risque: RiskCategoryStats;    // >50%
+  };
+}
+
+// Stats complètes
+interface CompleteStats {
+  byRisk: {
+    sure: RiskCategoryStats;      // ≤30% - Sûr
+    modere: RiskCategoryStats;    // 31-50% - Modéré
+    risque: RiskCategoryStats;    // >50% - Risqué
+  };
+  bySport: {
+    foot: SportStats;
+    basket: SportStats;
+  };
+  overall: PeriodStats;
+}
+
 // S'assurer que le dossier data existe
 function ensureDataDir() {
   const dataDir = path.dirname(DATA_FILE);
@@ -240,6 +277,77 @@ function calculatePeriodStats(predictions: Prediction[]): PeriodStats {
   };
 }
 
+// Catégorie de risque
+type RiskCategory = 'sure' | 'modere' | 'risque';
+
+function getRiskCategory(risk: number): RiskCategory {
+  if (risk <= 30) return 'sure';
+  if (risk <= 50) return 'modere';
+  return 'risque';
+}
+
+// Calculer les stats par catégorie de risque
+function calculateRiskStats(predictions: Prediction[]): RiskCategoryStats {
+  const completed = predictions.filter(p => p.status === 'completed');
+  const pending = predictions.filter(p => p.status === 'pending');
+  const wins = completed.filter(p => p.resultMatch === true).length;
+  const losses = completed.filter(p => p.resultMatch === false).length;
+  
+  return {
+    total: predictions.length,
+    wins,
+    losses,
+    pending: pending.length,
+    winRate: completed.length > 0 ? Math.round((wins / completed.length) * 100) : 0
+  };
+}
+
+// Calculer les stats complètes par catégorie de risque et sport
+function calculateCompleteStats(predictions: Prediction[]): CompleteStats {
+  // Par catégorie de risque
+  const surePredictions = predictions.filter(p => getRiskCategory(p.riskPercentage) === 'sure');
+  const moderePredictions = predictions.filter(p => getRiskCategory(p.riskPercentage) === 'modere');
+  const risquePredictions = predictions.filter(p => getRiskCategory(p.riskPercentage) === 'risque');
+  
+  // Par sport
+  const footPredictions = predictions.filter(p => p.sport === 'Foot');
+  const basketPredictions = predictions.filter(p => p.sport === 'Basket');
+  
+  // Stats par sport avec catégories
+  const calculateSportStats = (sportPredictions: Prediction[]): SportStats => {
+    const completed = sportPredictions.filter(p => p.status === 'completed');
+    const pending = sportPredictions.filter(p => p.status === 'pending');
+    const wins = completed.filter(p => p.resultMatch === true).length;
+    const losses = completed.filter(p => p.resultMatch === false).length;
+    
+    return {
+      total: sportPredictions.length,
+      wins,
+      losses,
+      pending: pending.length,
+      winRate: completed.length > 0 ? Math.round((wins / completed.length) * 100) : 0,
+      riskCategories: {
+        sure: calculateRiskStats(sportPredictions.filter(p => getRiskCategory(p.riskPercentage) === 'sure')),
+        modere: calculateRiskStats(sportPredictions.filter(p => getRiskCategory(p.riskPercentage) === 'modere')),
+        risque: calculateRiskStats(sportPredictions.filter(p => getRiskCategory(p.riskPercentage) === 'risque'))
+      }
+    };
+  };
+  
+  return {
+    byRisk: {
+      sure: calculateRiskStats(surePredictions),
+      modere: calculateRiskStats(moderePredictions),
+      risque: calculateRiskStats(risquePredictions)
+    },
+    bySport: {
+      foot: calculateSportStats(footPredictions),
+      basket: calculateSportStats(basketPredictions)
+    },
+    overall: calculatePeriodStats(predictions)
+  };
+}
+
 // === API publique ===
 
 export const PredictionStore = {
@@ -378,6 +486,55 @@ export const PredictionStore = {
   getStats() {
     const detailed = this.getDetailedStats();
     return detailed.overall;
+  },
+
+  // Obtenir les stats complètes par catégorie de risque et sport
+  getCompleteStats(): CompleteStats {
+    const store = loadData();
+    return calculateCompleteStats(store.predictions);
+  },
+
+  // Obtenir les stats par catégorie de risque uniquement
+  getStatsByRisk(): { sure: RiskCategoryStats; modere: RiskCategoryStats; risque: RiskCategoryStats } {
+    const store = loadData();
+    
+    const surePredictions = store.predictions.filter(p => getRiskCategory(p.riskPercentage) === 'sure');
+    const moderePredictions = store.predictions.filter(p => getRiskCategory(p.riskPercentage) === 'modere');
+    const risquePredictions = store.predictions.filter(p => getRiskCategory(p.riskPercentage) === 'risque');
+    
+    return {
+      sure: calculateRiskStats(surePredictions),
+      modere: calculateRiskStats(moderePredictions),
+      risque: calculateRiskStats(risquePredictions)
+    };
+  },
+
+  // Obtenir les stats par sport uniquement
+  getStatsBySport(): { foot: SportStats; basket: SportStats } {
+    const store = loadData();
+    
+    const footPredictions = store.predictions.filter(p => p.sport === 'Foot');
+    const basketPredictions = store.predictions.filter(p => p.sport === 'Basket');
+    
+    const calcStats = (predictions: Prediction[]): SportStats => {
+      const completed = predictions.filter(p => p.status === 'completed');
+      const pending = predictions.filter(p => p.status === 'pending');
+      const wins = completed.filter(p => p.resultMatch === true).length;
+      const losses = completed.filter(p => p.resultMatch === false).length;
+      
+      return {
+        total: predictions.length,
+        wins,
+        losses,
+        pending: pending.length,
+        winRate: completed.length > 0 ? Math.round((wins / completed.length) * 100) : 0
+      };
+    };
+    
+    return {
+      foot: calcStats(footPredictions),
+      basket: calcStats(basketPredictions)
+    };
   },
 
   // Nettoyer les anciennes données (plus de 2 mois)

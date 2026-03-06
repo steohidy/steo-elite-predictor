@@ -12,22 +12,33 @@ import {
   RefreshCw,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Shield,
+  AlertTriangle,
+  Zap
 } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
+interface RiskCategoryStats {
+  total: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number;
+}
+
+interface SportStats {
+  total: number;
+  wins: number;
+  losses: number;
+  pending: number;
+  winRate: number;
+}
+
 interface PeriodStats {
   totalPredictions: number;
-  results: {
-    total: number;
-    correct: number;
-    rate: number;
-  };
-  goals: {
-    total: number;
-    correct: number;
-    rate: number;
-  };
+  results: { total: number; correct: number; rate: number };
+  goals: { total: number; correct: number; rate: number };
   overall: number;
   pending: number;
   completed: number;
@@ -41,6 +52,15 @@ interface StatsData {
   weekly: PeriodStats;
   monthly: PeriodStats;
   overall: PeriodStats;
+  byRisk: {
+    sure: RiskCategoryStats;
+    modere: RiskCategoryStats;
+    risque: RiskCategoryStats;
+  };
+  bySport: {
+    foot: SportStats;
+    basket: SportStats;
+  };
   total: number;
   pending: number;
   completed: number;
@@ -96,10 +116,37 @@ export function PredictionStats() {
 
   if (!stats) return null;
 
-  // Sélectionner les stats à afficher
   const displayStats = stats.daily.totalPredictions > 0 ? stats.daily : 
                        stats.weekly.totalPredictions > 0 ? stats.weekly : 
                        stats.overall;
+
+  // Couleurs par catégorie de risque
+  const riskConfig = {
+    sure: { 
+      label: 'Sûr', 
+      icon: Shield, 
+      color: 'text-green-500', 
+      bg: 'bg-green-500/15',
+      border: 'border-green-500/30',
+      desc: '≤30% de risque'
+    },
+    modere: { 
+      label: 'Modéré', 
+      icon: Zap, 
+      color: 'text-orange-500', 
+      bg: 'bg-orange-500/15',
+      border: 'border-orange-500/30',
+      desc: '31-50% de risque'
+    },
+    risque: { 
+      label: 'Risqué', 
+      icon: AlertTriangle, 
+      color: 'text-red-500', 
+      bg: 'bg-red-500/15',
+      border: 'border-red-500/30',
+      desc: '>50% de risque'
+    }
+  };
 
   return (
     <section id="stats" className="scroll-mt-20">
@@ -113,22 +160,20 @@ export function PredictionStats() {
               <div className="min-w-0">
                 <CardTitle className="text-lg sm:text-xl text-foreground">Statistiques Pronostics</CardTitle>
                 <p className="text-xs sm:text-sm text-muted-foreground truncate">
-                  Suivi des performances et taux de réussite
+                  Suivi des performances par catégorie et sport
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleCheckResults}
-                disabled={refreshing}
-                className="text-purple-500 hover:bg-purple-500/10"
-              >
-                <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
-                Vérifier
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCheckResults}
+              disabled={refreshing}
+              className="text-purple-500 hover:bg-purple-500/10"
+            >
+              <RefreshCw className={`h-4 w-4 mr-1 ${refreshing ? 'animate-spin' : ''}`} />
+              Vérifier
+            </Button>
           </div>
         </CardHeader>
         
@@ -183,6 +228,110 @@ export function PredictionStats() {
                 <span className="text-red-500">{displayStats.losses}</span>
               </p>
               <p className="text-xs text-muted-foreground">résultats</p>
+            </div>
+          </div>
+
+          {/* Stats par catégorie de risque */}
+          <div className="space-y-4 mb-6">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <Shield className="h-4 w-4 text-purple-500" />
+              Performance par catégorie de risque
+            </h4>
+            
+            <div className="grid grid-cols-3 gap-3">
+              {Object.entries(stats.byRisk).map(([key, riskStats]) => {
+                const config = riskConfig[key as keyof typeof riskConfig];
+                const Icon = config.icon;
+                
+                return (
+                  <div 
+                    key={key} 
+                    className={`p-3 rounded-lg border ${config.border} ${config.bg}`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <Icon className={`h-4 w-4 ${config.color}`} />
+                      <span className={`text-xs font-semibold ${config.color}`}>
+                        {config.label}
+                      </span>
+                    </div>
+                    <div className="text-center">
+                      <p className={`text-xl font-bold ${riskStats.winRate >= 50 ? 'text-green-500' : riskStats.winRate > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                        {riskStats.winRate > 0 ? `${riskStats.winRate}%` : '-'}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {riskStats.wins}V/{riskStats.losses}D
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        {riskStats.total} pronos • {riskStats.pending} en attente
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Stats par sport */}
+          <div className="space-y-4 mb-6">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <Trophy className="h-4 w-4 text-purple-500" />
+              Performance par sport
+            </h4>
+            
+            <div className="grid grid-cols-2 gap-3">
+              {/* Football */}
+              <div className="p-4 rounded-lg border border-green-500/30 bg-green-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">⚽</span>
+                  <span className="text-sm font-semibold">Football</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div>
+                    <p className={`text-xl font-bold ${stats.bySport.foot.winRate >= 50 ? 'text-green-500' : stats.bySport.foot.winRate > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                      {stats.bySport.foot.winRate > 0 ? `${stats.bySport.foot.winRate}%` : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Taux</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold">
+                      <span className="text-green-500">{stats.bySport.foot.wins}</span>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-red-500">{stats.bySport.foot.losses}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">V/D</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center mt-2">
+                  {stats.bySport.foot.total} pronos • {stats.bySport.foot.pending} en attente
+                </p>
+              </div>
+
+              {/* Basketball */}
+              <div className="p-4 rounded-lg border border-orange-500/30 bg-orange-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">🏀</span>
+                  <span className="text-sm font-semibold">Basketball</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <div>
+                    <p className={`text-xl font-bold ${stats.bySport.basket.winRate >= 50 ? 'text-green-500' : stats.bySport.basket.winRate > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                      {stats.bySport.basket.winRate > 0 ? `${stats.bySport.basket.winRate}%` : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Taux</p>
+                  </div>
+                  <div>
+                    <p className="text-xl font-bold">
+                      <span className="text-green-500">{stats.bySport.basket.wins}</span>
+                      <span className="text-muted-foreground">/</span>
+                      <span className="text-red-500">{stats.bySport.basket.losses}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">V/D</p>
+                  </div>
+                </div>
+                <p className="text-[10px] text-muted-foreground text-center mt-2">
+                  {stats.bySport.basket.total} pronos • {stats.bySport.basket.pending} en attente
+                </p>
+              </div>
             </div>
           </div>
 

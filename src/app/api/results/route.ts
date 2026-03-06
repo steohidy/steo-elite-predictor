@@ -105,6 +105,8 @@ export async function GET(request: Request) {
       const detailedStats = PredictionStore.getDetailedStats();
       const info = PredictionStore.getInfo();
       const integrity = PredictionStore.verifyIntegrity();
+      const statsByRisk = PredictionStore.getStatsByRisk();
+      const statsBySport = PredictionStore.getStatsBySport();
       
       return NextResponse.json({
         // Stats par période
@@ -112,12 +114,34 @@ export async function GET(request: Request) {
         weekly: detailedStats.weekly,
         monthly: detailedStats.monthly,
         overall: detailedStats.overall,
+        // Stats par catégorie de risque
+        byRisk: statsByRisk,
+        // Stats par sport
+        bySport: statsBySport,
         // Infos générales
         ...info,
         // Intégrité
         integrity: integrity.valid,
         timestamp: new Date().toISOString()
       });
+    }
+    
+    // Stats par catégorie de risque uniquement
+    if (action === 'stats_risk') {
+      const statsByRisk = PredictionStore.getStatsByRisk();
+      return NextResponse.json(statsByRisk);
+    }
+    
+    // Stats par sport uniquement
+    if (action === 'stats_sport') {
+      const statsBySport = PredictionStore.getStatsBySport();
+      return NextResponse.json(statsBySport);
+    }
+    
+    // Stats complètes
+    if (action === 'complete_stats') {
+      const completeStats = PredictionStore.getCompleteStats();
+      return NextResponse.json(completeStats);
     }
     
     // Statistiques détaillées complètes
