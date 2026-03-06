@@ -287,7 +287,7 @@ export async function POST(request: Request) {
             awayTeam: pred.awayTeam,
             league: pred.league,
             sport: pred.sport,
-            matchDate: pred.matchDate,
+            matchDate: new Date(pred.matchDate),
             oddsHome: pred.oddsHome,
             oddsDraw: pred.oddsDraw,
             oddsAway: pred.oddsAway,
