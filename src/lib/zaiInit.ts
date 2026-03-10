@@ -1,12 +1,8 @@
 /**
  * Module d'initialisation pour z-ai-web-dev-sdk
- * 
- * Le SDK cherche le fichier .z-ai-config UNIQUEMENT dans:
- * 1. process.cwd()/.z-ai-config
- * 2. homedir()/.z-ai-config
- * 3. /etc/.z-ai-config
- * 
- * Sur Vercel, on écrit dans process.cwd() qui peut être writable pendant l'exécution.
+ *
+ * Le SDK TypeScript déclare le constructeur comme "private", mais JavaScript l'autorise.
+ * On utilise un cast pour contourner cette restriction sur Vercel.
  */
 
 import fs from 'fs';
@@ -17,27 +13,26 @@ import os from 'os';
 interface ZAIConfig {
   baseUrl: string;
   apiKey: string;
-  chatId: string;
-  token: string;
-  userId: string;
+  chatId?: string;
+  userId?: string;
 }
 
-const CONFIG: ZAIConfig = {
-  baseUrl: process.env.ZAI_BASE_URL || 'http://172.25.136.193:8080/v1',
-  apiKey: process.env.ZAI_API_KEY || 'Z.ai',
-  chatId: process.env.ZAI_CHAT_ID || 'chat-67ccc72c-b06c-4cdc-b880-f7e9f177527b',
-  token: process.env.ZAI_TOKEN || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNzczN2ZhODEtMGE4Zi00MmYzLThkNzUtNGNjYWQ4MjZhMDVkIiwiY2hhdF9pZCI6ImNoYXQtNjdjY2M3MmMtYjA2Yy00Y2RjLWI4ODAtZjdlOWYxNzc1MjdiIn0.4r8e_eVfwA4rB87EcxpCkh4JvOEbaUT5wrjoZqnqjs4',
-  userId: process.env.ZAI_USER_ID || '7737fa81-0a8f-42f3-8d75-4ccad826a05d',
-};
+// Construit la config depuis les env vars
+function buildConfig(): ZAIConfig {
+  return {
+    baseUrl: process.env.ZAI_BASE_URL || 'http://172.25.136.193:8080/v1',
+    apiKey: process.env.ZAI_API_KEY || 'Z.ai',
+    chatId: process.env.ZAI_CHAT_ID || 'chat-67ccc72c-b06c-4cdc-b880-f7e9f177527b',
+    userId: process.env.ZAI_USER_ID || '7737fa81-0a8f-42f3-8d75-4ccad826a05d',
+  };
+}
 
 // Instance unique
 let zaiInstance: any = null;
 let isInitialized = false;
 let initError: string | null = null;
 
-/**
- * Les 3 emplacements exacts où le SDK cherche le fichier (dans l'ordre)
- */
+// Chemins standards du SDK pour le fichier de config
 const SDK_CONFIG_PATHS = [
   path.join(process.cwd(), '.z-ai-config'),
   path.join(os.homedir(), '.z-ai-config'),
@@ -45,83 +40,103 @@ const SDK_CONFIG_PATHS = [
 ];
 
 /**
- * Vérifie si le fichier de config existe déjà
+ * Détecte si on est sur Vercel
  */
-function configExists(): string | null {
-  for (const p of SDK_CONFIG_PATHS) {
-    if (fs.existsSync(p)) {
-      try {
-        const content = fs.readFileSync(p, 'utf8');
-        const config = JSON.parse(content);
-        if (config.baseUrl && config.apiKey) {
-          console.log(`📦 z-ai: Config existant: ${p}`);
-          return p;
-        }
-      } catch {
-        // Fichier invalide, continuer
-      }
-    }
-  }
-  return null;
+function isVercel(): boolean {
+  return !!(process.env.VERCEL || process.env.NOW_REGION || process.env.VERCEL_ENV);
 }
 
 /**
- * Écrit le fichier de config aux emplacements du SDK
+ * Vérifie si le fichier de config existe et est valide
  */
-function writeConfig(): string | null {
-  const content = JSON.stringify(CONFIG, null, 2);
-  
-  for (const p of SDK_CONFIG_PATHS) {
-    try {
-      fs.writeFileSync(p, content, 'utf8');
-      
-      // Vérifier qu'on peut le relire
-      const readBack = fs.readFileSync(p, 'utf8');
-      const parsed = JSON.parse(readBack);
-      if (parsed.baseUrl && parsed.apiKey) {
-        console.log(`✅ z-ai: Config écrit et vérifié: ${p}`);
-        return p;
-      }
-    } catch (err: any) {
-      console.log(`⚠️ z-ai: Impossible d'écrire ${p}: ${err.code || err.message}`);
-    }
+function configExists(filePath: string): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+    const content = fs.readFileSync(filePath, 'utf8');
+    const config = JSON.parse(content);
+    return !!(config.baseUrl && config.apiKey);
+  } catch {
+    return false;
   }
-  
-  return null;
 }
 
 /**
- * Initialise le SDK
+ * Écrit le fichier de config de manière synchrone
+ */
+function writeConfigSync(filePath: string, config: ZAIConfig): boolean {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(config, null, 2), 'utf8');
+    return configExists(filePath);
+  } catch (err: any) {
+    console.log(`⚠️ z-ai: Impossible d'écrire ${filePath}: ${err.code || err.message}`);
+    return false;
+  }
+}
+
+/**
+ * Initialise le SDK avec gestion Vercel
+ * Sur Vercel, le constructeur est appelé directement car le fichier n'est pas accessible
  */
 async function initZAI(): Promise<void> {
   if (isInitialized) return;
   isInitialized = true;
 
   console.log('🔧 Initialisation z-ai SDK...');
+  console.log(`📍 Environnement: ${isVercel() ? 'Vercel (serverless)' : 'Local/Dev'}`);
+
+  const config = buildConfig();
 
   try {
-    // 1. Vérifier si un fichier existe déjà
-    let configPath = configExists();
-    
-    // 2. Sinon, essayer d'écrire
-    if (!configPath) {
-      configPath = writeConfig();
+    // Importer le SDK
+    const ZAIModule = await import('z-ai-web-dev-sdk');
+    const ZAIClass = ZAIModule.default;
+
+    // Stratégie 1: Essayer create() - ça marche si un fichier de config existe
+    let configFound = false;
+    for (const p of SDK_CONFIG_PATHS) {
+      if (configExists(p)) {
+        console.log(`📦 Config existant: ${p}`);
+        configFound = true;
+        break;
+      }
     }
-    
-    if (!configPath) {
-      throw new Error('Impossible de créer le fichier de config (filesystem read-only)');
+
+    // Stratégie 2: Si pas de config et pas Vercel, essayer d'écrire
+    if (!configFound && !isVercel()) {
+      for (const p of SDK_CONFIG_PATHS) {
+        if (writeConfigSync(p, config)) {
+          console.log(`✅ Config écrit: ${p}`);
+          configFound = true;
+          break;
+        }
+      }
     }
-    
-    // 3. Importer et créer le SDK
-    const ZAI = await import('z-ai-web-dev-sdk');
-    zaiInstance = await ZAI.default.create();
-    
-    console.log('✅ SDK z-ai initialisé avec succès');
+
+    // Stratégie 3: Sur Vercel ou si create() échoue, utiliser le constructeur directement
+    try {
+      // Essayer d'abord create() si config existe
+      if (configFound) {
+        zaiInstance = await ZAIClass.create();
+        console.log('✅ SDK z-ai initialisé via create()');
+      } else {
+        throw new Error('Pas de fichier de config disponible');
+      }
+    } catch {
+      // Fallback: utiliser le constructeur directement (contourne le "private" TypeScript)
+      console.log('📌 Utilisation du constructeur direct (bypass TypeScript private)');
+      
+      // @ts-ignore - Le constructeur est "private" en TypeScript mais fonctionne en JS
+      const ZAIAsAny = ZAIClass as any;
+      zaiInstance = new ZAIAsAny(config);
+      console.log('✅ SDK z-ai initialisé via constructeur direct');
+    }
+
     initError = null;
-    
+
   } catch (error) {
     initError = error instanceof Error ? error.message : 'Erreur inconnue';
     console.error('❌ Erreur initialisation z-ai:', initError);
+    console.log('📌 SDK z-ai désactivé. Les fallbacks seront utilisés.');
     zaiInstance = null;
   }
 }
@@ -147,7 +162,7 @@ export async function isZaiAvailable(): Promise<boolean> {
 }
 
 /**
- * Récupère l'erreur d'initialisation
+ * Récupère l'erreur d'initialisation (pour debug)
  */
 export function getZaiError(): string | null {
   return initError;
@@ -164,7 +179,11 @@ export async function zaiWebSearch(query: string, numResults: number = 5): Promi
   const zai = await getZAI();
 
   if (!zai) {
-    return { success: false, results: [], error: initError || 'SDK non configuré' };
+    return {
+      success: false,
+      results: [],
+      error: initError || 'SDK z-ai non configuré'
+    };
   }
 
   try {
@@ -197,7 +216,11 @@ export async function zaiPageReader(url: string): Promise<{
   const zai = await getZAI();
 
   if (!zai) {
-    return { success: false, content: '', error: initError || 'SDK non configuré' };
+    return {
+      success: false,
+      content: '',
+      error: initError || 'SDK z-ai non configuré'
+    };
   }
 
   try {
@@ -211,5 +234,12 @@ export async function zaiPageReader(url: string): Promise<{
   }
 }
 
-const ZaiInit = { getZAI, isZaiAvailable, getZaiError, zaiWebSearch, zaiPageReader };
+const ZaiInit = {
+  getZAI,
+  isZaiAvailable,
+  getZaiError,
+  zaiWebSearch,
+  zaiPageReader,
+};
+
 export default ZaiInit;
