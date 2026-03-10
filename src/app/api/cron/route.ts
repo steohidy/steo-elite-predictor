@@ -1,7 +1,7 @@
 /**
  * API Cron - Tâches programmées
  * 
- * GET /api/cron?key=CRON_SECRET
+ * GET /api/cron?key=CRON_SECRET&force=true
  * 
  * Tâches exécutées:
  * - 7h UTC: Déplacer les matchs NBA de la nuit vers "terminé"
@@ -15,16 +15,8 @@ let nbaNightMatches: any[] = [];
 let lastNBACheck: Date | null = null;
 
 /**
- * Vérifie si c'est 7h UTC (± 30 minutes)
- */
-function is7hUTC(): boolean {
-  const now = new Date();
-  const hour = now.getUTCHours();
-  return hour === 7;
-}
-
-/**
  * Marque les matchs NBA comme terminés
+ * Déplace les matchs NBA de la nuit (matchs qui ont eu lieu entre 00h et 07h UTC) vers "terminés"
  */
 async function markNBAMatchesFinished(): Promise<{ count: number; matches: any[] }> {
   try {
@@ -48,12 +40,23 @@ async function markNBAMatchesFinished(): Promise<{ count: number; matches: any[]
     const today0h = new Date(today7h);
     today0h.setUTCHours(0, 0, 0, 0);
     
+    console.log(`🕐 Recherche matchs NBA entre ${today0h.toISOString()} et ${today7h.toISOString()}`);
+    
     // Matchs NBA qui ont commencé avant 7h UTC aujourd'hui
     const nbaMatchesToFinish = matches.filter((m: any) => {
-      if (m.sport !== 'Basket' && m.sport !== 'NBA') return false;
+      // Vérifier si c'est un match NBA/Basket
+      const isNBA = m.sport === 'Basket' || m.sport === 'NBA' || m.league === 'NBA';
+      if (!isNBA) return false;
+      
+      // Vérifier si pas déjà terminé
+      if (m.status === 'finished') return false;
       
       const matchDate = new Date(m.date);
-      return matchDate >= today0h && matchDate < today7h;
+      const inTimeRange = matchDate >= today0h && matchDate < today7h;
+      
+      console.log(`  - ${m.homeTeam} vs ${m.awayTeam}: ${matchDate.toISOString()} (inRange: ${inTimeRange})`);
+      
+      return inTimeRange;
     });
     
     // Marquer comme terminés
@@ -71,7 +74,12 @@ async function markNBAMatchesFinished(): Promise<{ count: number; matches: any[]
     
     return {
       count: nbaMatchesToFinish.length,
-      matches: nbaMatchesToFinish
+      matches: nbaMatchesToFinish.map((m: any) => ({
+        id: m.id,
+        homeTeam: m.homeTeam,
+        awayTeam: m.awayTeam,
+        date: m.date
+      }))
     };
     
   } catch (error) {
@@ -107,14 +115,21 @@ async function checkFinishedResults(): Promise<{ verified: number }> {
 /**
  * GET - Exécuter les tâches cron
  * Vercel Cron appelle cette route automatiquement
+ * 
+ * Params:
+ * - key: CRON_SECRET (optionnel en local)
+ * - force: si true, exécute la tâche NBA même si ce n'est pas 7h UTC
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const cronKey = searchParams.get('key');
+  const force = searchParams.get('force') === 'true';
   
-  // Vérifier la clé de sécurité (sauf en local)
+  // Vérifier la clé de sécurité (sauf en local ou si pas configurée)
   const expectedKey = process.env.CRON_SECRET;
-  if (expectedKey && cronKey !== expectedKey) {
+  const isLocal = !process.env.VERCEL_URL || process.env.VERCEL_URL.includes('localhost');
+  
+  if (expectedKey && !isLocal && cronKey !== expectedKey) {
     return NextResponse.json({
       success: false,
       error: 'Clé cron invalide'
@@ -123,19 +138,24 @@ export async function GET(request: NextRequest) {
   
   const results: any = {
     timestamp: new Date().toISOString(),
+    currentHourUTC: new Date().getUTCHours(),
     tasks: {}
   };
   
   try {
-    // Tâche 1: Marquer les matchs NBA comme terminés (si 7h UTC)
     const hour = new Date().getUTCHours();
     
-    if (hour === 7) {
-      console.log('🕒 7h UTC - Exécution tâche NBA terminés');
+    // Tâche 1: Marquer les matchs NBA comme terminés
+    // Exécuter si 7h UTC OU si force=true
+    if (hour === 7 || force) {
+      console.log(`🕒 Exécution tâche NBA terminés (force: ${force})`);
       const nbaResult = await markNBAMatchesFinished();
       results.tasks.nba_finished = nbaResult;
     } else {
-      results.tasks.nba_finished = { skipped: true, reason: `Pas 7h UTC (actuellement ${hour}h)` };
+      results.tasks.nba_finished = { 
+        skipped: true, 
+        reason: `Pas 7h UTC (actuellement ${hour}h). Ajoutez &force=true pour forcer.`
+      };
     }
     
     // Tâche 2: Vérifier les résultats
@@ -160,9 +180,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { task, key } = body;
     
-    // Vérifier la clé de sécurité
+    // Vérifier la clé de sécurité (optionnelle si pas configurée)
     const expectedKey = process.env.CRON_SECRET;
-    if (expectedKey && key !== expectedKey) {
+    const isLocal = !process.env.VERCEL_URL || process.env.VERCEL_URL.includes('localhost');
+    
+    if (expectedKey && !isLocal && key !== expectedKey) {
       return NextResponse.json({
         success: false,
         error: 'Clé admin invalide'
