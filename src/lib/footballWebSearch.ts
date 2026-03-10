@@ -1,11 +1,5 @@
 /**
  * Football Web Search - Actualités et infos Football via z-ai SDK
- * 
- * Fournit:
- * - Actualités récentes des équipes
- * - Infos sur les blessures
- * - Analyses pré-match
- * - Transferts
  */
 
 import { zaiWebSearch, zaiPageReader, isZaiAvailable } from './zaiInit';
@@ -15,38 +9,23 @@ export interface FootballNewsItem {
   url: string;
   snippet: string;
   source: string;
-  date?: string;
 }
 
 export interface FootballTeamNews {
   team: string;
   news: FootballNewsItem[];
   injuries: string[];
-  form?: string;
   lastUpdated: string;
 }
 
-// Cache des actualités (15 min)
+// Cache (15 min)
 const newsCache = new Map<string, { data: FootballTeamNews; timestamp: number }>();
 const CACHE_DURATION = 15 * 60 * 1000;
-
-// Sources Football fiables
-const FOOTBALL_SOURCES = [
-  'bbc.com/sport/football',
-  'skysports.com/football',
-  'espn.com/soccer',
-  'goal.com',
-  'theathletic.com/football',
-  'lequipe.fr',
-  'marca.com',
-  'kicker.de',
-];
 
 /**
  * Recherche les actualités d'une équipe de football
  */
 export async function searchFootballTeamNews(teamName: string): Promise<FootballTeamNews> {
-  // Vérifier le cache
   const cached = newsCache.get(teamName);
   if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
     return cached.data;
@@ -59,16 +38,14 @@ export async function searchFootballTeamNews(teamName: string): Promise<Football
     lastUpdated: new Date().toISOString(),
   };
 
-  // Vérifier si z-ai est disponible
   if (!(await isZaiAvailable())) {
     console.log('⚠️ z-ai SDK non disponible pour Football news');
     return result;
   }
 
   try {
-    // Recherche actualités récentes
-    const newsQuery = `${teamName} football news today`;
-    const newsSearch = await zaiWebSearch(newsQuery, 5);
+    // Recherche actualités
+    const newsSearch = await zaiWebSearch(`${teamName} football news today`, 5);
 
     if (newsSearch.success) {
       result.news = newsSearch.results.map(item => ({
@@ -79,14 +56,13 @@ export async function searchFootballTeamNews(teamName: string): Promise<Football
       }));
     }
 
-    // Recherche blessures spécifiquement
-    const injuryQuery = `${teamName} injury news today`;
-    const injurySearch = await zaiWebSearch(injuryQuery, 3);
+    // Recherche blessures
+    const injurySearch = await zaiWebSearch(`${teamName} injury news today`, 3);
 
     if (injurySearch.success) {
       for (const item of injurySearch.results) {
         const snippetLower = item.snippet.toLowerCase();
-        if (snippetLower.includes('injur') || 
+        if (snippetLower.includes('injur') ||
             snippetLower.includes('sidelined') ||
             snippetLower.includes('ruled out') ||
             snippetLower.includes('doubt')) {
@@ -95,9 +71,7 @@ export async function searchFootballTeamNews(teamName: string): Promise<Football
       }
     }
 
-    // Mettre en cache
     newsCache.set(teamName, { data: result, timestamp: Date.now() });
-
     console.log(`✅ Football News: ${result.news.length} actualités pour ${teamName}`);
     return result;
 
@@ -111,7 +85,7 @@ export async function searchFootballTeamNews(teamName: string): Promise<Football
  * Recherche les actualités d'un matchup Football
  */
 export async function searchFootballMatchupNews(
-  homeTeam: string, 
+  homeTeam: string,
   awayTeam: string,
   league?: string
 ): Promise<{
@@ -133,8 +107,7 @@ export async function searchFootballMatchupNews(
 
   try {
     const leagueStr = league ? ` ${league}` : '';
-    
-    // Recherches en parallèle
+
     const [homeData, awayData, matchupSearch, lineupSearch] = await Promise.all([
       searchFootballTeamNews(homeTeam),
       searchFootballTeamNews(awayTeam),
@@ -162,15 +135,11 @@ export async function searchFootballMatchupNews(
 }
 
 /**
- * Récupère les blessures d'une équipe depuis Transfermarkt
+ * Récupère les blessures d'une équipe
  */
 export async function getTeamInjuries(teamName: string): Promise<{
   success: boolean;
-  injuries: Array<{
-    player: string;
-    injury: string;
-    returnDate?: string;
-  }>;
+  injuries: Array<{ player: string; injury: string }>;
 }> {
   if (!(await isZaiAvailable())) {
     return { success: false, injuries: [] };
@@ -183,16 +152,13 @@ export async function getTeamInjuries(teamName: string): Promise<{
       return { success: false, injuries: [] };
     }
 
-    // Essayer de lire la page Transfermarkt
-    for (const result of search.results) {
-      if (result.url.includes('transfermarkt')) {
-        const pageContent = await zaiPageReader(result.url);
-        
+    for (const item of search.results) {
+      if (item.url.includes('transfermarkt')) {
+        const pageContent = await zaiPageReader(item.url);
+
         if (pageContent.success && pageContent.content) {
-          // Extraction basique des infos de blessures
-          const injuries: Array<{ player: string; injury: string; returnDate?: string }> = [];
-          
-          // Pattern simplifié pour extraire les blessés
+          const injuries: Array<{ player: string; injury: string }> = [];
+
           const lines = pageContent.content.split('\n');
           for (const line of lines) {
             if (line.toLowerCase().includes('injur') || line.toLowerCase().includes('sidelined')) {
@@ -219,39 +185,7 @@ export async function getTeamInjuries(teamName: string): Promise<{
 }
 
 /**
- * Recherche les stats d'une équipe (forme, xG, etc.)
- */
-export async function searchTeamStats(teamName: string): Promise<{
-  success: boolean;
-  form?: string;
-  xG?: number;
-  xGA?: number;
-  news?: string;
-}> {
-  if (!(await isZaiAvailable())) {
-    return { success: false };
-  }
-
-  try {
-    const search = await zaiWebSearch(`${teamName} xG stats form 2025 fbref`, 3);
-
-    if (search.success && search.results.length > 0) {
-      return {
-        success: true,
-        news: search.results[0].snippet,
-      };
-    }
-
-    return { success: false };
-
-  } catch (error) {
-    console.error('❌ Erreur recherche stats équipe:', error);
-    return { success: false };
-  }
-}
-
-/**
- * Récupère les dernières infos de transfert
+ * Recherche les transferts
  */
 export async function searchTransferNews(teamName?: string): Promise<FootballNewsItem[]> {
   if (!(await isZaiAvailable())) {
@@ -259,10 +193,10 @@ export async function searchTransferNews(teamName?: string): Promise<FootballNew
   }
 
   try {
-    const query = teamName 
+    const query = teamName
       ? `${teamName} transfer news today`
       : 'football transfer news today';
-    
+
     const search = await zaiWebSearch(query, 5);
 
     if (search.success) {
@@ -282,12 +216,10 @@ export async function searchTransferNews(teamName?: string): Promise<FootballNew
   }
 }
 
-// Export par défaut
 const FootballWebSearch = {
   searchFootballTeamNews,
   searchFootballMatchupNews,
   getTeamInjuries,
-  searchTeamStats,
   searchTransferNews,
 };
 
