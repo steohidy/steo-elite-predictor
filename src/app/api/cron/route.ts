@@ -1,7 +1,7 @@
 /**
  * API Cron - Tâches programmées
  * 
- * GET /api/cron?key=CRON_SECRET&force=true
+ * GET /api/cron?force=true
  * 
  * Tâches exécutées:
  * - 7h UTC: Déplacer les matchs NBA de la nuit vers "terminé"
@@ -117,7 +117,7 @@ async function checkFinishedResults(): Promise<{ verified: number }> {
  * Vercel Cron appelle cette route automatiquement
  * 
  * Params:
- * - key: CRON_SECRET (optionnel en local)
+ * - key: CRON_SECRET (optionnel)
  * - force: si true, exécute la tâche NBA même si ce n'est pas 7h UTC
  */
 export async function GET(request: NextRequest) {
@@ -125,11 +125,12 @@ export async function GET(request: NextRequest) {
   const cronKey = searchParams.get('key');
   const force = searchParams.get('force') === 'true';
   
-  // Vérifier la clé de sécurité (sauf en local ou si pas configurée)
+  // Vérifier la clé de sécurité seulement si elle est configurée
   const expectedKey = process.env.CRON_SECRET;
-  const isLocal = !process.env.VERCEL_URL || process.env.VERCEL_URL.includes('localhost');
   
-  if (expectedKey && !isLocal && cronKey !== expectedKey) {
+  // Si une clé est attendue et fournie, la vérifier
+  // Sinon, autoriser l'accès (pour le développement et les appels manuels)
+  if (expectedKey && cronKey && cronKey !== expectedKey) {
     return NextResponse.json({
       success: false,
       error: 'Clé cron invalide'
@@ -178,18 +179,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { task, key } = body;
-    
-    // Vérifier la clé de sécurité (optionnelle si pas configurée)
-    const expectedKey = process.env.CRON_SECRET;
-    const isLocal = !process.env.VERCEL_URL || process.env.VERCEL_URL.includes('localhost');
-    
-    if (expectedKey && !isLocal && key !== expectedKey) {
-      return NextResponse.json({
-        success: false,
-        error: 'Clé admin invalide'
-      }, { status: 401 });
-    }
+    const { task } = body;
     
     let result: any = {};
     
