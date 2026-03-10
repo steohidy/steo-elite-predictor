@@ -1,18 +1,11 @@
 /**
  * Module d'initialisation pour z-ai-web-dev-sdk
  * 
- * IMPORTANT: Ce module écrit le fichier de config SYNCHRONEment
- * au chargement du module, AVANT que le SDK ne soit importé.
- * 
- * Sur Vercel, process.cwd() peut être read-only, mais /tmp est writable.
- * On écrit donc dans les deux emplacements.
+ * SOLUTION SIMPLE: Passer la config DIRECTEMENT au constructeur ZAI
+ * Pas besoin de fichier de config - on utilise les variables d'environnement
  */
 
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-
-// Configuration
+// Configuration depuis les variables d'environnement
 interface ZAIConfig {
   baseUrl: string;
   apiKey: string;
@@ -29,35 +22,13 @@ const CONFIG: ZAIConfig = {
   userId: process.env.ZAI_USER_ID || '7737fa81-0a8f-42f3-8d75-4ccad826a05d',
 };
 
-// ÉCRIRE LE FICHIER SYNCHRONEMENT AU CHARGEMENT DU MODULE
-// C'est la clé - le faire AVANT d'importer le SDK
-const configContent = JSON.stringify(CONFIG, null, 2);
-const configLocations = [
-  path.join(process.cwd(), '.z-ai-config'),
-  path.join(os.homedir(), '.z-ai-config'),
-  '/tmp/.z-ai-config',
-];
-
-for (const location of configLocations) {
-  try {
-    fs.writeFileSync(location, configContent, 'utf8');
-    console.log(`✅ z-ai: Config écrit: ${location}`);
-  } catch (err: any) {
-    // Certaines locations peuvent être read-only, c'est normal
-    console.log(`⚠️ z-ai: Impossible d'écrire ${location}: ${err.code || err.message}`);
-  }
-}
-
-// MAINTENANT on peut importer le SDK
-import ZAI from 'z-ai-web-dev-sdk';
-
-// Instance unique
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
+// Instance unique du SDK
+let zaiInstance: any = null;
 let isInitialized = false;
 let initError: string | null = null;
 
 /**
- * Initialise le SDK
+ * Initialise le SDK avec la config directe (pas de fichier!)
  */
 async function initZAI(): Promise<void> {
   if (isInitialized) return;
@@ -66,8 +37,13 @@ async function initZAI(): Promise<void> {
   console.log('🔧 Initialisation z-ai SDK...');
 
   try {
-    zaiInstance = await ZAI.create();
-    console.log('✅ SDK z-ai initialisé avec succès');
+    // Import dynamique du SDK
+    const ZAI = await import('z-ai-web-dev-sdk');
+    
+    // CRÉER DIRECTEMENT AVEC LA CONFIG - pas besoin de fichier!
+    zaiInstance = new ZAI.default(CONFIG);
+    
+    console.log('✅ SDK z-ai initialisé avec succès (config directe)');
     initError = null;
   } catch (error) {
     initError = error instanceof Error ? error.message : 'Erreur inconnue';
@@ -79,7 +55,7 @@ async function initZAI(): Promise<void> {
 /**
  * Récupère l'instance du SDK
  */
-export async function getZAI(): Promise<Awaited<ReturnType<typeof ZAI.create>> | null> {
+export async function getZAI(): Promise<any> {
   if (!isInitialized) {
     await initZAI();
   }
@@ -161,4 +137,5 @@ export async function zaiPageReader(url: string): Promise<{
   }
 }
 
-export default { getZAI, isZaiAvailable, getZaiError, zaiWebSearch, zaiPageReader };
+const ZaiInit = { getZAI, isZaiAvailable, getZaiError, zaiWebSearch, zaiPageReader };
+export default ZaiInit;
