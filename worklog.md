@@ -93,6 +93,14 @@ GITHUB_TOKEN=ghp_votre_token_ici
 
 ## 🔄 Dernières Modifications
 
+### 2024-03-07 - Fix z-ai SDK sur Vercel
+- ✅ Analyse du SDK z-ai-web-dev-sdk (version 0.0.16)
+- ✅ Le constructeur TypeScript est déclaré "private" mais fonctionne en JavaScript
+- ✅ Solution: bypass TypeScript avec cast `as any` pour instancier directement
+- ✅ Configuration passée directement au constructeur sans fichier de config
+- ✅ Variables d'environnement utilisées: ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_USER_ID
+- ✅ Fallback gracieux si SDK non disponible
+
 ### 2024-03-04 - Analyse de Combinés
 - ✅ Nouvelle section "Analyse Combiné" dans le menu
 - ✅ Limite de 3 analyses/jour/utilisateur
@@ -134,3 +142,63 @@ GITHUB_TOKEN=ghp_votre_token_ici
 2. **Prolonger validité:** Panneau admin → bouton "Ajouter temps"
 3. **Vérifier sessions:** Fichier `data/users.json` → `activeSessions`
 4. **Logs d'activité:** Fichier `data/users.json` → `logs`
+
+---
+
+## 🔧 2024-03-07 - Fix z-ai SDK pour Vercel
+
+### Problème
+- `ZAI.create()` nécessite un fichier `.z-ai-config` sur le disque
+- Vercel serverless a un filesystem read-only (sauf /tmp)
+- Le SDK ne cherchait pas dans /tmp par défaut
+
+### Solution
+- **Instanciation directe** de la classe ZAI avec la config:
+  ```typescript
+  // Au lieu de: await ZAI.create() (nécessite fichier)
+  // On utilise: new ZAI(config) (pas de fichier requis)
+  const ZAI = (await import('z-ai-web-dev-sdk')).default;
+  zaiInstance = new ZAI(config);
+  ```
+
+### Fichiers modifiés
+- `src/lib/zaiInit.ts` - Instanciation directe sans fichier config
+
+### Variables d'environnement Vercel
+```
+ZAI_BASE_URL=http://172.25.136.193:8080/v1
+ZAI_API_KEY=Z.ai
+ZAI_CHAT_ID=chat-67ccc72c-b06c-4cdc-b880-f7e9f177527b
+ZAI_TOKEN=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ZAI_USER_ID=7737fa81-0a8f-42f3-8d75-4ccad826a05d
+```
+
+---
+
+## 🔧 2024-03-07 - Cron Job 7h UTC
+
+### Fonctionnalités
+- Vérification des résultats NBA via ESPN API
+- Vérification des résultats Football via Football-Data API
+- Mise à jour des statistiques
+
+### Endpoint
+- `GET /api/cron?key=CRON_SECRET` - Exécution automatique à 7h UTC
+- `GET /api/cron?force=true` - Forcer l'exécution manuellement
+
+### Fichier créé
+- `src/app/api/cron/route.ts`
+
+---
+
+## 🔧 2024-03-07 - Distribution Matchs
+
+### Planning
+| Période UTC | Sport | Max matchs |
+|-------------|-------|------------|
+| 01h-20h | Football | 10 |
+| 20h-01h | NBA | 5 |
+
+### Conseils Expert V2
+- Limité à **4 suggestions** au lieu de 7
+- Optimisé pour réduire le temps de chargement
