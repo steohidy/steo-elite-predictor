@@ -292,7 +292,7 @@ export function generateMatchFeatures(
     formDiff: homeForm - awayForm,
     goalsDiff: (homeTeamStats.avgGoalsScored - awayTeamStats.avgGoalsScored) -
                (homeTeamStats.avgGoalsConceded - awayTeamStats.avgGoalsConceded),
-    positionDiff: awayTeamStats.seasonStats.position - homeTeamStats.seasonStats.position || 0
+    positionDiff: (awayTeamStats.seasonStats.position ?? 10) - (homeTeamStats.seasonStats.position ?? 10)
   };
 }
 
