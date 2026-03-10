@@ -78,7 +78,7 @@ const TEAM_ID_CACHE: Record<string, number> = {
   'strasbourg': 95,
   'toulouse': 96,
   'bordeaux': 77,
-  'saintetienne': 94, 'saintetienne': 94, 'asse': 94,
+  'saintetienne': 94, 'asse': 94,
   
   // Angleterre - Premier League
   'mancity': 50, 'manchestercity': 50,
