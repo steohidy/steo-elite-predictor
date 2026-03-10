@@ -49,6 +49,9 @@ package-lock.json
 yarn.lock
 pnpm-lock.yaml
 
+# z-ai SDK config (sensitive tokens)
+.z-ai-config
+
 # Uploads (local only)
 upload/
 
