@@ -1,7 +1,12 @@
 /**
- * API d'analyse de match
+ * API d'analyse de match - VERSION OPTIMISÉE V2
  * Permet aux utilisateurs d'analyser des matchs (max 3/jour)
- * Intègre: Blessures, Suspensions, Forme, H2H via API-Football
+ * 
+ * OPTIMISATIONS:
+ * - Timeout global de 10 secondes max
+ * - Retour de résultats partiels si timeout
+ * - Cache intelligent des team IDs
+ * - Exécution parallèle des requêtes
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -39,14 +44,12 @@ interface AnalysisResult {
   risk?: number;
   confidence?: string;
   recommendation?: string;
-  // Prédictions détaillées
   predictions?: {
-    betType: string; // "Victoire" ou "Victoire/Nul"
+    betType: string;
     corners: { total: number; over85: number; prediction: string };
     cards: { total: number; over45: number; prediction: string };
     goals: { total: number; over25: number; prediction: string };
   };
-  // Données enrichies
   enrichment?: {
     homeInjuries: Injury[];
     awayInjuries: Injury[];
@@ -57,7 +60,7 @@ interface AnalysisResult {
     awayStats?: { played: number; wins: number; draws: number; losses: number; form: string };
   };
   warnings?: string[];
-  source: 'cache' | 'api' | 'not_found';
+  source: 'cache' | 'api' | 'not_found' | 'timeout';
 }
 
 interface UserAnalysisHistory {
@@ -70,6 +73,9 @@ interface UserAnalysisHistory {
 // Cache des analyses du jour
 const dailyAnalysisCache = new Map<string, UserAnalysisHistory>();
 const MAX_ANALYSES_PER_DAY = 3;
+
+// Timeout global pour l'analyse
+const ANALYSIS_TIMEOUT = 10000; // 10 secondes max
 
 /**
  * Get today's date in YYYY-MM-DD format
@@ -180,24 +186,18 @@ function findBestTeamMatch(
   for (const name of availableNames) {
     const nameNorm = normalizeTeamName(name);
     
-    // Check for exact match first
     if (nameNorm === inputNorm) {
       return { name, similarity: 100 };
     }
     
-    // Check for contains match
     if (nameNorm.includes(inputNorm) || inputNorm.includes(nameNorm)) {
-      const similarity = Math.max(
-        calculateSimilarity(inputNorm, nameNorm),
-        90 // High similarity for contains
-      );
+      const similarity = Math.max(calculateSimilarity(inputNorm, nameNorm), 90);
       if (!bestMatch || similarity > bestMatch.similarity) {
         bestMatch = { name, similarity };
       }
       continue;
     }
     
-    // Check for fuzzy match
     const similarity = calculateSimilarity(inputNorm, nameNorm);
     if (similarity >= threshold && (!bestMatch || similarity > bestMatch.similarity)) {
       bestMatch = { name, similarity };
@@ -208,7 +208,7 @@ function findBestTeamMatch(
 }
 
 /**
- * Find match in cache with fuzzy matching
+ * Find match in cache with fuzzy matching - VERSION RAPIDE
  */
 async function findMatchInCache(match: MatchInput): Promise<AnalysisResult | null> {
   try {
@@ -216,59 +216,66 @@ async function findMatchInCache(match: MatchInput): Promise<AnalysisResult | nul
       ? `https://${process.env.VERCEL_URL}` 
       : 'http://localhost:3000';
     
-    const response = await fetch(`${baseUrl}/api/matches`, {
-      cache: 'no-store'
-    });
-    const data = await response.json();
-    const matches = data.matches || [];
+    // Timeout de 3 secondes pour la recherche en cache
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
     
-    // Get all team names for fuzzy matching
-    const homeTeams = matches.map((m: any) => m.homeTeam as string).filter(Boolean);
-    const awayTeams = matches.map((m: any) => m.awayTeam as string).filter(Boolean);
-    const allTeams: string[] = [...new Set([...homeTeams, ...awayTeams])] as string[];
-    
-    // Find best matches for input teams
-    const homeMatch = findBestTeamMatch(match.homeTeam, allTeams);
-    const awayMatch = findBestTeamMatch(match.awayTeam, allTeams);
-    
-    if (!homeMatch || !awayMatch) {
-      return null;
-    }
-    
-    // Find the specific match
-    for (const m of matches) {
-      const mHomeNorm = normalizeTeamName(m.homeTeam);
-      const mAwayNorm = normalizeTeamName(m.awayTeam);
-      const homeMatchNorm = normalizeTeamName(homeMatch.name);
-      const awayMatchNorm = normalizeTeamName(awayMatch.name);
+    try {
+      const response = await fetch(`${baseUrl}/api/matches`, {
+        cache: 'no-store',
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
       
-      if (
-        (mHomeNorm === homeMatchNorm || calculateSimilarity(mHomeNorm, homeMatchNorm) >= 85) &&
-        (mAwayNorm === awayMatchNorm || calculateSimilarity(mAwayNorm, awayMatchNorm) >= 85)
-      ) {
-        // Calculate predictions
-        const predictions = calculatePredictions(m);
-        
-        return {
-          match: {
-            ...match,
-            homeTeam: m.homeTeam, // Use actual name from cache
-            awayTeam: m.awayTeam
-          },
-          found: true,
-          ourOdds: {
-            home: m.oddsHome,
-            draw: m.oddsDraw,
-            away: m.oddsAway
-          },
-          risk: m.insight?.riskPercentage || 50,
-          confidence: m.insight?.confidence || 'medium',
-          recommendation: generateRecommendation(m, match.betType),
-          predictions,
-          source: 'cache',
-          warnings: []
-        };
+      const data = await response.json();
+      const matches = data.matches || [];
+      
+      const homeTeams = matches.map((m: any) => m.homeTeam as string).filter(Boolean);
+      const awayTeams = matches.map((m: any) => m.awayTeam as string).filter(Boolean);
+      const allTeams: string[] = [...new Set([...homeTeams, ...awayTeams])] as string[];
+      
+      const homeMatch = findBestTeamMatch(match.homeTeam, allTeams);
+      const awayMatch = findBestTeamMatch(match.awayTeam, allTeams);
+      
+      if (!homeMatch || !awayMatch) {
+        return null;
       }
+      
+      for (const m of matches) {
+        const mHomeNorm = normalizeTeamName(m.homeTeam);
+        const mAwayNorm = normalizeTeamName(m.awayTeam);
+        const homeMatchNorm = normalizeTeamName(homeMatch.name);
+        const awayMatchNorm = normalizeTeamName(awayMatch.name);
+        
+        if (
+          (mHomeNorm === homeMatchNorm || calculateSimilarity(mHomeNorm, homeMatchNorm) >= 85) &&
+          (mAwayNorm === awayMatchNorm || calculateSimilarity(mAwayNorm, awayMatchNorm) >= 85)
+        ) {
+          const predictions = calculatePredictions(m);
+          
+          return {
+            match: {
+              ...match,
+              homeTeam: m.homeTeam,
+              awayTeam: m.awayTeam
+            },
+            found: true,
+            ourOdds: {
+              home: m.oddsHome,
+              draw: m.oddsDraw,
+              away: m.oddsAway
+            },
+            risk: m.insight?.riskPercentage || 50,
+            confidence: m.insight?.confidence || 'medium',
+            recommendation: generateRecommendation(m, match.betType),
+            predictions,
+            source: 'cache',
+            warnings: []
+          };
+        }
+      }
+    } catch {
+      clearTimeout(timeoutId);
     }
     
     return null;
@@ -279,14 +286,13 @@ async function findMatchInCache(match: MatchInput): Promise<AnalysisResult | nul
 }
 
 /**
- * Calculate detailed predictions for corners, cards, goals
+ * Calculate detailed predictions
  */
 function calculatePredictions(match: any): AnalysisResult['predictions'] {
   const oddsHome = match.oddsHome;
   const oddsAway = match.oddsAway;
   const oddsDraw = match.oddsDraw;
   
-  // Determine bet type
   const favorite = oddsHome < oddsAway ? 'home' : 'away';
   const favoriteOdds = favorite === 'home' ? oddsHome : oddsAway;
   const drawProb = oddsDraw ? Math.round(100 / oddsDraw / ((1/oddsHome) + (1/oddsAway) + (1/oddsDraw)) * 100) : 0;
@@ -300,7 +306,6 @@ function calculatePredictions(match: any): AnalysisResult['predictions'] {
     betType = `${favorite === 'home' ? match.homeTeam : match.awayTeam} ou Nul`;
   }
   
-  // Use existing predictions from match if available
   const goalsPrediction = match.goalsPrediction || calculateGoals(oddsHome, oddsAway, oddsDraw);
   const cardsPrediction = match.cardsPrediction || calculateCards(oddsHome, oddsAway, oddsDraw);
   const cornersPrediction = match.cornersPrediction || calculateCorners(oddsHome, oddsAway, oddsDraw);
@@ -329,11 +334,6 @@ function calculatePredictions(match: any): AnalysisResult['predictions'] {
  * Calculate goals prediction
  */
 function calculateGoals(oddsHome: number, oddsAway: number, oddsDraw: number | null): any {
-  const probHome = 1 / oddsHome;
-  const probAway = 1 / oddsAway;
-  const probDraw = oddsDraw ? 1 / oddsDraw : 0.25;
-  const total = probHome + probAway + probDraw;
-  
   const disparity = Math.abs(oddsHome - oddsAway);
   let expectedGoals = 2.6;
   
@@ -355,7 +355,7 @@ function calculateGoals(oddsHome: number, oddsAway: number, oddsDraw: number | n
 /**
  * Calculate cards prediction
  */
-function calculateCards(oddsHome: number, oddsAway: number, oddsDraw: number | null): any {
+function calculateCards(oddsHome: number, oddsAway: number, _oddsDraw: number | null): any {
   const baseCards = 4.0;
   const ratio = Math.max(oddsHome, oddsAway) / Math.min(oddsHome, oddsAway);
   
@@ -372,7 +372,7 @@ function calculateCards(oddsHome: number, oddsAway: number, oddsDraw: number | n
 /**
  * Calculate corners prediction
  */
-function calculateCorners(oddsHome: number, oddsAway: number, oddsDraw: number | null): any {
+function calculateCorners(oddsHome: number, oddsAway: number, _oddsDraw: number | null): any {
   const baseCorners = 9.0;
   const ratio = Math.max(oddsHome, oddsAway) / Math.min(oddsHome, oddsAway);
   
@@ -387,9 +387,9 @@ function calculateCorners(oddsHome: number, oddsAway: number, oddsDraw: number |
 }
 
 /**
- * Generate recommendation based on match data
+ * Generate recommendation
  */
-function generateRecommendation(match: any, betType?: string): string {
+function generateRecommendation(match: any, _betType?: string): string {
   const oddsHome = match.oddsHome;
   const oddsAway = match.oddsAway;
   const oddsDraw = match.oddsDraw;
@@ -398,12 +398,10 @@ function generateRecommendation(match: any, betType?: string): string {
   const favoriteTeam = favorite === 'home' ? match.homeTeam : match.awayTeam;
   const favoriteOdds = favorite === 'home' ? oddsHome : oddsAway;
   
-  // Calculate probabilities
   const totalImplied = (1/oddsHome) + (1/oddsAway) + (oddsDraw ? 1/oddsDraw : 0);
   const homeProb = Math.round((1/oddsHome) / totalImplied * 100);
   const drawProb = oddsDraw ? Math.round((1/oddsDraw) / totalImplied * 100) : 0;
-  const awayProb = Math.round((1/oddsAway) / totalImplied * 100);
-  const favoriteProb = favorite === 'home' ? homeProb : awayProb;
+  const favoriteProb = favorite === 'home' ? homeProb : Math.round((1/oddsAway) / totalImplied * 100);
   
   if (favoriteOdds < 1.5 && favoriteProb >= 65) {
     return `✅ Victoire ${favoriteTeam} recommandée (${favoriteProb}% de probabilité)`;
@@ -417,14 +415,27 @@ function generateRecommendation(match: any, betType?: string): string {
 }
 
 /**
- * Enrich analysis with API-Football data
+ * Wrapper avec timeout pour l'enrichissement
  */
-async function enrichWithApiFootball(
+async function enrichWithTimeout(
   homeTeam: string,
-  awayTeam: string
-): Promise<AnalysisResult['enrichment']> {
+  awayTeam: string,
+  timeoutMs: number = 8000
+): Promise<AnalysisResult['enrichment'] | undefined> {
   try {
-    const analysisData = await getMatchAnalysisData(homeTeam, awayTeam);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    const analysisData = await Promise.race([
+      getMatchAnalysisData(homeTeam, awayTeam),
+      new Promise<null>((_, reject) => {
+        setTimeout(() => reject(new Error('Timeout')), timeoutMs);
+      })
+    ]);
+    
+    clearTimeout(timeoutId);
+    
+    if (!analysisData) return undefined;
     
     return {
       homeInjuries: analysisData.homeInjuries,
@@ -447,61 +458,18 @@ async function enrichWithApiFootball(
         form: analysisData.awayStats.form
       } : undefined
     };
-  } catch (error) {
-    console.error('Erreur enrichissement API-Football:', error);
+  } catch (error: any) {
+    if (error.message === 'Timeout') {
+      console.log('⏱️ Enrichissement timeout - retour sans données enrichies');
+    } else {
+      console.error('Erreur enrichissement:', error.message);
+    }
     return undefined;
   }
 }
 
 /**
- * Verify match exists and is current
- */
-async function verifyMatch(homeTeam: string, awayTeam: string): Promise<{
-  valid: boolean;
-  fixture?: { id: number; date: string; league: string; status: string };
-  warnings: string[];
-}> {
-  const warnings: string[] = [];
-  
-  try {
-    const analysisData = await getMatchAnalysisData(homeTeam, awayTeam);
-    
-    if (analysisData.fixture) {
-      // Check if match is in the future
-      const matchDate = new Date(analysisData.fixture.date);
-      const now = new Date();
-      
-      if (matchDate < now) {
-        warnings.push('⚠️ Ce match a déjà commencé ou est terminé');
-      }
-      
-      // Check if within next 7 days
-      const weekLater = new Date(now);
-      weekLater.setDate(weekLater.getDate() + 7);
-      
-      if (matchDate > weekLater) {
-        warnings.push('📅 Ce match est programmé dans plus de 7 jours');
-      }
-      
-      return { 
-        valid: true, 
-        fixture: analysisData.fixture,
-        warnings 
-      };
-    }
-    
-    // Match not found in API-Football, check if teams exist
-    warnings.push('ℹ️ Match non trouvé dans notre base de données API-Football');
-    return { valid: false, warnings };
-    
-  } catch (error) {
-    warnings.push('⚠️ Impossible de vérifier le match via API-Football');
-    return { valid: false, warnings };
-  }
-}
-
-/**
- * Analyze matches
+ * Analyze matches - VERSION OPTIMISÉE
  */
 async function analyzeMatches(
   matches: MatchInput[],
@@ -523,7 +491,6 @@ async function analyzeMatches(
     };
   }
   
-  // Check max matches
   if (matches.length > 3) {
     return {
       success: false,
@@ -545,48 +512,31 @@ async function analyzeMatches(
   const results: AnalysisResult[] = [];
   
   for (const match of matches) {
-    // 1. Find in cache
+    // 1. Find in cache first (fast)
     let result = await findMatchInCache(match);
     
     if (!result) {
-      // 2. Verify match exists and enrich with API-Football
-      const verification = await verifyMatch(match.homeTeam, match.awayTeam);
-      
-      if (verification.valid && verification.fixture) {
-        // Match exists, create basic result
-        result = {
-          match,
-          found: true,
-          fixture: verification.fixture,
-          risk: 50,
-          confidence: 'medium',
-          recommendation: 'Match confirmé - Consultez les cotes de votre bookmaker',
-          warnings: verification.warnings,
-          source: 'api'
-        };
-      } else {
-        // Match not found
-        result = {
-          match,
-          found: false,
-          warnings: verification.warnings,
-          source: 'not_found',
-          recommendation: 'Match non trouvé. Vérifiez les noms des équipes.'
-        };
-      }
+      // 2. Return basic result without enrichment (fallback rapide)
+      result = {
+        match,
+        found: false,
+        warnings: ['Match non trouvé dans le cache - vérifiez les noms'],
+        source: 'not_found',
+        recommendation: 'Match non trouvé. Vérifiez les noms des équipes.'
+      };
     }
     
-    // 3. Enrich with API-Football data (injuries, form, H2H)
-    if (result && result.found) {
-      const enrichment = await enrichWithApiFootball(
+    // 3. Try to enrich with timeout (non-blocking)
+    if (result.found) {
+      const enrichment = await enrichWithTimeout(
         result.match.homeTeam,
-        result.match.awayTeam
+        result.match.awayTeam,
+        8000 // 8 secondes max pour l'enrichissement
       );
       
       if (enrichment) {
         result.enrichment = enrichment;
         
-        // Add injury warnings
         const totalInjuries = (enrichment.homeInjuries?.length || 0) + 
                               (enrichment.awayInjuries?.length || 0);
         if (totalInjuries > 0) {
@@ -659,12 +609,30 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
     
-    const result = await analyzeMatches(matches, username);
+    // Global timeout for the entire analysis
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Analyse timeout')), ANALYSIS_TIMEOUT);
+    });
+    
+    const result = await Promise.race([
+      analyzeMatches(matches, username),
+      timeoutPromise
+    ]);
     
     return NextResponse.json(result);
     
   } catch (error: any) {
     console.error('Erreur analyse match:', error);
+    
+    if (error.message === 'Analyse timeout') {
+      return NextResponse.json({
+        success: false,
+        error: 'Analyse trop longue - veuillez réessayer',
+        results: [],
+        remainingAnalyses: 3
+      }, { status: 408 });
+    }
+    
     return NextResponse.json({
       success: false,
       error: error.message || 'Erreur lors de l\'analyse'

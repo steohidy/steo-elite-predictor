@@ -1,27 +1,16 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "prisma generate && next build",
-  "installCommand": "bun install",
-  "framework": "nextjs",
-  "regions": ["cdg1"],
-  "functions": {
-    "src/app/api/**/*.ts": {
-      "memory": 1024,
-      "maxDuration": 30
+  "crons": [
+    {
+      "path": "/api/cron?key=STEELITE_CRON_2026",
+      "schedule": "0 7 * * *"
     }
-  },
+  ],
   "headers": [
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "s-maxage=300, stale-while-revalidate=600" }
+        { "key": "Cache-Control", "value": "no-store, must-revalidate" }
       ]
-    }
-  ],
-  "crons": [
-    {
-      "path": "/api/cron?task=all",
-      "schedule": "0 20 * * *"
     }
   ]
 }

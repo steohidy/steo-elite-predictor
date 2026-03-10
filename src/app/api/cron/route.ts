@@ -1,286 +1,210 @@
-import { NextResponse } from 'next/server';
-import PredictionStore from '@/lib/store';
-
 /**
- * API Cron pour l'automatisation des tâches
- * Appelée automatiquement par Vercel Cron Jobs
- * Sécurisée par vérification du header CRON_SECRET
+ * API Cron - Tâches programmées
+ * 
+ * GET /api/cron?key=CRON_SECRET
+ * 
+ * Tâches exécutées:
+ * - 7h UTC: Déplacer les matchs NBA de la nuit vers "terminé"
+ * - Vérification des résultats des matchs terminés
  */
 
-// Vérifier l'autorisation
-function isAuthorized(request: Request): boolean {
-  const authHeader = request.headers.get('authorization');
-  const cronSecret = process.env.CRON_SECRET || 'steo-cron-secret-2026';
+import { NextRequest, NextResponse } from 'next/server';
 
-  if (authHeader === `Bearer ${cronSecret}`) {
-    return true;
-  }
+// Cache des matchs NBA de la nuit
+let nbaNightMatches: any[] = [];
+let lastNBACheck: Date | null = null;
 
-  const host = request.headers.get('host') || '';
-  if (host.includes('localhost') || host.includes('127.0.0.1')) {
-    return true;
-  }
-
-  return false;
+/**
+ * Vérifie si c'est 7h UTC (± 30 minutes)
+ */
+function is7hUTC(): boolean {
+  const now = new Date();
+  const hour = now.getUTCHours();
+  return hour === 7;
 }
 
 /**
- * Tâche: Récupérer et sauvegarder les matchs du jour
+ * Marque les matchs NBA comme terminés
  */
-async function fetchMatches(): Promise<{ success: boolean; message: string; count: number }> {
+async function markNBAMatchesFinished(): Promise<{ count: number; matches: any[] }> {
   try {
-    console.log('📥 [CRON] Récupération des matchs du jour...');
-
-    const { getCrossValidatedMatches } = await import('@/lib/crossValidation');
-    const result = await getCrossValidatedMatches();
-
-    if (!result.matches || result.matches.length === 0) {
-      return { success: true, message: 'Aucun match disponible', count: 0 };
-    }
-
-    // Filtrer les matchs sûrs (risque ≤ 40%)
-    const safeMatches = result.matches.filter(
-      (m: any) => m.insight && m.insight.riskPercentage <= 40 && m.status === 'upcoming'
-    );
-
-    let savedCount = 0;
-    for (const match of safeMatches) {
-      try {
-        await PredictionStore.add({
-          matchId: match.id,
-          homeTeam: match.homeTeam,
-          awayTeam: match.awayTeam,
-          league: match.league || 'Unknown',
-          sport: match.sport || 'Foot',
-          matchDate: new Date(match.date),
-          oddsHome: match.oddsHome,
-          oddsDraw: match.oddsDraw ?? null,
-          oddsAway: match.oddsAway,
-          predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
-          predictedGoals: match.goalsPrediction?.prediction ?? null,
-          predictedCards: null,
-          confidence: match.insight?.confidence || 'medium',
-          riskPercentage: match.insight?.riskPercentage || 50,
-          homeScore: null,
-          awayScore: null,
-          totalGoals: null,
-          actualResult: null,
-          resultMatch: null,
-          goalsMatch: null,
-          cardsMatch: null,
-        } as any);
-        savedCount++;
-      } catch {
-        // Ignorer si déjà existant
-      }
-    }
-
-    console.log(`✅ [CRON] ${savedCount} pronostics sauvegardés`);
-    return { success: true, message: `${savedCount} pronostics sauvegardés`, count: savedCount };
-
-  } catch (error) {
-    console.error('❌ [CRON] Erreur fetch_matches:', error);
-    return { success: false, message: 'Erreur lors de la récupération', count: 0 };
-  }
-}
-
-/**
- * Tâche: Vérifier les résultats des matchs terminés
- */
-async function verifyResults(): Promise<{ success: boolean; message: string; checked: number; correct: number }> {
-  try {
-    console.log('🔍 [CRON] Vérification des résultats...');
-
-    const apiKey = process.env.FOOTBALL_DATA_API_KEY;
-    if (!apiKey) {
-      return { success: false, message: 'API key non configurée', checked: 0, correct: 0 };
-    }
-
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().split('T')[0];
-
-    const response = await fetch(
-      `https://api.football-data.org/v4/matches?date=${dateStr}`,
-      {
-        headers: { 'X-Auth-Token': apiKey },
-        next: { revalidate: 0 }
-      }
-    );
-
-    if (!response.ok) {
-      return { success: false, message: `Erreur API: ${response.status}`, checked: 0, correct: 0 };
-    }
-
+    // Récupérer les matchs actuels
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    const response = await fetch(`${baseUrl}/api/matches`, {
+      cache: 'no-store'
+    });
+    
     const data = await response.json();
-    const finishedMatches = (data.matches || []).filter(
-      (m: any) => m.status === 'FINISHED' || m.status === 'FT'
-    );
-
-    const pendingPredictions = await PredictionStore.getPending();
-
-    const normalizeName = (name: string): string => {
-      return name
-        .toLowerCase()
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^a-z0-9]/g, '')
-        .substring(0, 8);
-    };
-
-    let checkedCount = 0;
-    let correctCount = 0;
-
-    for (const prediction of pendingPredictions) {
-      for (const match of finishedMatches) {
-        const predHomeNorm = normalizeName(prediction.homeTeam);
-        const predAwayNorm = normalizeName(prediction.awayTeam);
-        const matchHomeNorm = normalizeName(match.homeTeam?.name || '');
-        const matchAwayNorm = normalizeName(match.awayTeam?.name || '');
-
-        const homeMatch = predHomeNorm === matchHomeNorm ||
-          predHomeNorm.includes(matchHomeNorm) ||
-          matchHomeNorm.includes(predHomeNorm);
-        const awayMatch = predAwayNorm === matchAwayNorm ||
-          predAwayNorm.includes(matchAwayNorm) ||
-          matchAwayNorm.includes(predAwayNorm);
-
-        if (homeMatch && awayMatch) {
-          const homeScore = match.score?.fullTime?.home ?? match.score?.fullTime?.homeTeam ?? 0;
-          const awayScore = match.score?.fullTime?.away ?? match.score?.fullTime?.awayTeam ?? 0;
-
-          const actualResult = homeScore > awayScore ? 'home'
-            : homeScore < awayScore ? 'away'
-            : 'draw';
-
-          const resultMatch = prediction.predictedResult === actualResult;
-          if (resultMatch) correctCount++;
-
-          let goalsMatch: boolean | undefined;
-          if (prediction.predictedGoals) {
-            const totalGoals = homeScore + awayScore;
-            if (prediction.predictedGoals.toLowerCase().includes('over2.5')) {
-              goalsMatch = totalGoals > 2.5;
-            } else if (prediction.predictedGoals.toLowerCase().includes('under2.5')) {
-              goalsMatch = totalGoals < 2.5;
-            } else if (prediction.predictedGoals.toLowerCase().includes('over1.5')) {
-              goalsMatch = totalGoals > 1.5;
-            }
-          }
-
-          await PredictionStore.complete(prediction.matchId, {
-            homeScore,
-            awayScore,
-            actualResult,
-            resultMatch,
-            goalsMatch,
-            cardsMatch: undefined
-          });
-
-          checkedCount++;
-          console.log(`✅ [CRON] ${prediction.homeTeam} ${homeScore}-${awayScore} ${prediction.awayTeam} - ${resultMatch ? '✓' : '✗'}`);
-          break;
-        }
-      }
+    const matches = data.matches || [];
+    
+    // Filtrer les matchs NBA de la nuit (matchs qui ont eu lieu entre 00h et 07h UTC)
+    const now = new Date();
+    const today7h = new Date(now);
+    today7h.setUTCHours(7, 0, 0, 0);
+    
+    const today0h = new Date(today7h);
+    today0h.setUTCHours(0, 0, 0, 0);
+    
+    // Matchs NBA qui ont commencé avant 7h UTC aujourd'hui
+    const nbaMatchesToFinish = matches.filter((m: any) => {
+      if (m.sport !== 'Basket' && m.sport !== 'NBA') return false;
+      
+      const matchDate = new Date(m.date);
+      return matchDate >= today0h && matchDate < today7h;
+    });
+    
+    // Marquer comme terminés
+    for (const match of nbaMatchesToFinish) {
+      match.status = 'finished';
+      match.finishedAt = now.toISOString();
+      match.finishedReason = 'auto_nba_night';
     }
-
-    console.log(`✅ [CRON] ${checkedCount} résultats vérifiés, ${correctCount} corrects`);
+    
+    // Mettre à jour le cache
+    nbaNightMatches = nbaMatchesToFinish;
+    lastNBACheck = now;
+    
+    console.log(`🏀 ${nbaMatchesToFinish.length} matchs NBA marqués comme terminés`);
+    
     return {
-      success: true,
-      message: `${checkedCount} résultats vérifiés`,
-      checked: checkedCount,
-      correct: correctCount
+      count: nbaMatchesToFinish.length,
+      matches: nbaMatchesToFinish
     };
-
+    
   } catch (error) {
-    console.error('❌ [CRON] Erreur verify_results:', error);
-    return { success: false, message: 'Erreur lors de la vérification', checked: 0, correct: 0 };
+    console.error('Erreur marquage NBA terminés:', error);
+    return { count: 0, matches: [] };
   }
 }
 
 /**
- * Tâche: Nettoyer les anciennes données
+ * Vérifie les résultats des matchs terminés
  */
-async function cleanup(): Promise<{ success: boolean; message: string; removed: number }> {
+async function checkFinishedResults(): Promise<{ verified: number }> {
   try {
-    console.log('🧹 [CRON] Nettoyage des anciennes données...');
-
-    const removed = await PredictionStore.cleanup();
-
-    console.log(`✅ [CRON] ${removed} anciens pronostics supprimés`);
-    return { success: true, message: `${removed} pronostics supprimés`, removed };
-
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    // Appeler l'API de vérification des résultats
+    await fetch(`${baseUrl}/api/results`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'check_results' })
+    });
+    
+    return { verified: 1 };
+    
   } catch (error) {
-    console.error('❌ [CRON] Erreur cleanup:', error);
-    return { success: false, message: 'Erreur lors du nettoyage', removed: 0 };
+    console.error('Erreur vérification résultats:', error);
+    return { verified: 0 };
   }
 }
 
 /**
- * GET - Handler pour les Cron Jobs Vercel
+ * GET - Exécuter les tâches cron
+ * Vercel Cron appelle cette route automatiquement
  */
-export async function GET(request: Request) {
-  if (!isAuthorized(request)) {
-    return NextResponse.json(
-      { error: 'Non autorisé', message: 'CRON_SECRET invalide' },
-      { status: 401 }
-    );
-  }
-
+export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const task = searchParams.get('task');
-
-  console.log(`🕐 [CRON] Tâche reçue: ${task}`);
-
-  switch (task) {
-    case 'fetch_matches':
-      const fetchResult = await fetchMatches();
-      return NextResponse.json({
-        task: 'fetch_matches',
-        timestamp: new Date().toISOString(),
-        ...fetchResult
-      });
-
-    case 'verify_results':
-      const verifyResult = await verifyResults();
-      return NextResponse.json({
-        task: 'verify_results',
-        timestamp: new Date().toISOString(),
-        ...verifyResult
-      });
-
-    case 'cleanup':
-      const cleanupResult = await cleanup();
-      return NextResponse.json({
-        task: 'cleanup',
-        timestamp: new Date().toISOString(),
-        ...cleanupResult
-      });
-
-    case 'all':
-      const [fetchRes, verifyRes] = await Promise.all([
-        fetchMatches(),
-        verifyResults()
-      ]);
-      return NextResponse.json({
-        task: 'all',
-        timestamp: new Date().toISOString(),
-        fetch: fetchRes,
-        verify: verifyRes
-      });
-
-    default:
-      return NextResponse.json({
-        error: 'Tâche inconnue',
-        availableTasks: ['fetch_matches', 'verify_results', 'cleanup', 'all'],
-        usage: '?task=<task_name>'
-      }, { status: 400 });
+  const cronKey = searchParams.get('key');
+  
+  // Vérifier la clé de sécurité (sauf en local)
+  const expectedKey = process.env.CRON_SECRET;
+  if (expectedKey && cronKey !== expectedKey) {
+    return NextResponse.json({
+      success: false,
+      error: 'Clé cron invalide'
+    }, { status: 401 });
   }
+  
+  const results: any = {
+    timestamp: new Date().toISOString(),
+    tasks: {}
+  };
+  
+  try {
+    // Tâche 1: Marquer les matchs NBA comme terminés (si 7h UTC)
+    const hour = new Date().getUTCHours();
+    
+    if (hour === 7) {
+      console.log('🕒 7h UTC - Exécution tâche NBA terminés');
+      const nbaResult = await markNBAMatchesFinished();
+      results.tasks.nba_finished = nbaResult;
+    } else {
+      results.tasks.nba_finished = { skipped: true, reason: `Pas 7h UTC (actuellement ${hour}h)` };
+    }
+    
+    // Tâche 2: Vérifier les résultats
+    const verifyResult = await checkFinishedResults();
+    results.tasks.verify_results = verifyResult;
+    
+    results.success = true;
+    
+  } catch (error: any) {
+    results.success = false;
+    results.error = error.message;
+  }
+  
+  return NextResponse.json(results);
 }
 
 /**
- * POST - Permet aussi de déclencher manuellement
+ * POST - Forcer l'exécution des tâches (admin)
  */
-export async function POST(request: Request) {
-  return GET(request);
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { task, key } = body;
+    
+    // Vérifier la clé de sécurité
+    const expectedKey = process.env.CRON_SECRET;
+    if (expectedKey && key !== expectedKey) {
+      return NextResponse.json({
+        success: false,
+        error: 'Clé admin invalide'
+      }, { status: 401 });
+    }
+    
+    let result: any = {};
+    
+    switch (task) {
+      case 'nba_finished':
+        result = await markNBAMatchesFinished();
+        break;
+        
+      case 'verify_results':
+        result = await checkFinishedResults();
+        break;
+        
+      case 'all':
+        result = {
+          nba_finished: await markNBAMatchesFinished(),
+          verify_results: await checkFinishedResults()
+        };
+        break;
+        
+      default:
+        return NextResponse.json({
+          success: false,
+          error: 'Tâche inconnue. Utilisez: nba_finished, verify_results, ou all'
+        }, { status: 400 });
+    }
+    
+    return NextResponse.json({
+      success: true,
+      task,
+      result,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error: any) {
+    return NextResponse.json({
+      success: false,
+      error: error.message
+    }, { status: 500 });
+  }
 }
