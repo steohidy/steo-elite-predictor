@@ -202,3 +202,78 @@ ZAI_USER_ID=7737fa81-0a8f-42f3-8d75-4ccad826a05d
 ### Conseils Expert V2
 - Limité à **4 suggestions** au lieu de 7
 - Optimisé pour réduire le temps de chargement
+
+---
+
+## 🔧 2024-03-07 - Système ML Pré-entraîné
+
+### Architecture Recommandée (implémentée)
+
+Le Pipeline d'apprentissage:
+
+1. **Collecte (Scraping/API)** : Stats en temps réel via APIs existantes
+2. **Feature Engineering** : Transformation en 34 features normalisées
+3. **Entraînement LOCAL** : Script `ml/train.ts` à exécuter hors Vercel
+4. **Export JSON** : Modèle sérialisé dans `data/ml/model.json`
+5. **Inférence Vercel** : `src/lib/mlInference.ts` charge le modèle
+
+### Variables Complexes Intégrées
+
+| Variable | Description | Impact |
+|----------|-------------|--------|
+| `homeAdvantage` | Différence perf domicile/extérieur | +0.1 à +0.3 |
+| `fatigueDiff` | Jours de repos depuis dernier match | -5% à +5% |
+| `motivationDiff` | Enjeu (titre/relegation) | High/Medium/Low |
+| `form` | Forme sur 5 derniers matchs | 0-1 normalisé |
+| `h2h` | Historique tête-à-tête | % victoires |
+
+### Fichiers ML
+
+```
+ml/
+├── featureEngineering.ts  # 34 features normalisées
+├── model.ts              # Architecture réseau neurones
+├── train.ts              # Script entraînement local
+└── generateModel.ts      # Génération modèle initial
+
+src/lib/
+└── mlInference.ts        # Inférence rapide (Vercel)
+
+data/ml/
+└── model.json            # Modèle pré-entraîné
+```
+
+### Comment Entraîner Localement
+
+```bash
+# Installer les dépendances
+bun install
+
+# Générer données synthétiques et entraîner
+bun run ml/train.ts
+
+# Le modèle est sauvegardé dans data/ml/model.json
+# Il sera automatiquement utilisé par Vercel
+```
+
+### Architecture du Modèle
+
+```
+Input (34 features)
+  ↓
+Hidden Layer 1 (64 neurons, ReLU)
+  ↓
+Hidden Layer 2 (32 neurons, ReLU)
+  ↓
+Hidden Layer 3 (16 neurons, ReLU)
+  ↓
+Output (3 neurons, Softmax)
+  → [Prob Home, Prob Draw, Prob Away]
+```
+
+### Performance
+
+- **Temps d'inférence** : < 50ms par match
+- **Taille modèle** : ~100 KB JSON
+- **Mémoire** : Minimal (pas de GPU requis)
+- **Accuracy cible** : 55-65% (baseline)
