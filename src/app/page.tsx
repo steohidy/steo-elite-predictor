@@ -312,7 +312,7 @@ function AppDashboard({ onLogout, userInfo }: { onLogout: () => void; userInfo: 
   const [activeTab, setActiveTab] = useState<'safes' | 'moderate' | 'risky' | 'finished' | 'all'>('safes');
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [apiStatus, setApiStatus] = useState<'online' | 'offline' | 'loading'>('loading');
-  const [activeSection, setActiveSection] = useState<'matches' | 'analyse' | 'antitrap' | 'bankroll' | 'results' | 'admin'>('matches');
+  const [activeSection, setActiveSection] = useState<'matches' | 'nhl' | 'analyse' | 'antitrap' | 'bankroll' | 'results' | 'admin'>('matches');
   const [timing, setTiming] = useState<TimingInfo>({
     currentHour: new Date().getHours(),
     canRefresh: true,
@@ -531,6 +531,7 @@ function AppDashboard({ onLogout, userInfo }: { onLogout: () => void; userInfo: 
         
         {/* Menu Items */}
         <NavButton icon="⚽" label="Pronos" active={activeSection === 'matches'} onClick={() => setActiveSection('matches')} color="#f97316" />
+        <NavButton icon="🏒" label="NHL" active={activeSection === 'nhl'} onClick={() => setActiveSection('nhl')} color="#06b6d4" />
         <NavButton icon="🔍" label="Analyse" active={activeSection === 'analyse'} onClick={() => setActiveSection('analyse')} color="#3b82f6" />
         <NavButton icon="🛡️" label="Trap" active={activeSection === 'antitrap'} onClick={() => setActiveSection('antitrap')} color="#ef4444" />
         <NavButton icon="💰" label="Bank" active={activeSection === 'bankroll'} onClick={() => setActiveSection('bankroll')} color="#22c55e" />
@@ -732,6 +733,11 @@ function AppDashboard({ onLogout, userInfo }: { onLogout: () => void; userInfo: 
               </div>
             )}
           </>
+        )}
+
+        {/* Section NHL Hockey */}
+        {activeSection === 'nhl' && (
+          <NHLSection />
         )}
 
         {/* Section Analyse de Match */}
@@ -3867,6 +3873,468 @@ function MatchAnalysisSection({ username, matches }: { username: string; matches
             }}>
               {result.confidence === 'high' ? '✅ Haute' : result.confidence === 'medium' ? '⚠️ Moyenne' : '❌ Faible'}
             </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===== NHL SECTION COMPONENTS =====
+
+interface NHLMatch {
+  id: string;
+  homeTeam: string;
+  awayTeam: string;
+  date: string;
+  time?: string;
+  status: string;
+  isLive?: boolean;
+  homeScore?: number;
+  awayScore?: number;
+  analysis: {
+    projected: {
+      homeGoals: number;
+      awayGoals: number;
+      totalGoals: number;
+      spread: number;
+      homeWinProb: number;
+      awayWinProb: number;
+    };
+    factors: {
+      powerRatingDiff: number;
+      xGDiff: number;
+      goalieEdge: number;
+      fatigueEdge: number;
+    };
+    insights: {
+      spread: { recommendation: string; confidence: number };
+      total: { line: number; predicted: number; recommendation: string };
+      moneyline: { valueBet: { detected: boolean; type: string | null; edge: number } };
+      confidence: number;
+    };
+    injuryReport: {
+      home: { players: { player: string; status: string }[]; impact: string };
+      away: { players: { player: string; status: string }[]; impact: string };
+      summary: string;
+    };
+  };
+  homeTeamStats?: {
+    powerRating: { overall: number; xGFPercent: number; PDO: number };
+    injuries: { keyPlayersOut: string[] };
+  };
+  awayTeamStats?: {
+    powerRating: { overall: number; xGFPercent: number; PDO: number };
+    injuries: { keyPlayersOut: string[] };
+  };
+}
+
+// NHL Section Component
+function NHLSection() {
+  const [nhlMatches, setNhlMatches] = useState<NHLMatch[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [activeFilter, setActiveFilter] = useState<'all' | 'value' | 'high'>('all');
+
+  useEffect(() => {
+    const fetchNHL = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/nhl-pro');
+        const data = await response.json();
+        
+        if (data.predictions) {
+          setNhlMatches(data.predictions);
+        }
+        setLastUpdate(new Date());
+        setError(null);
+      } catch (err) {
+        setError('Erreur lors du chargement des matchs NHL');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchNHL();
+  }, []);
+
+  const valueBets = nhlMatches.filter(m => m.analysis?.insights?.moneyline?.valueBet?.detected);
+  const highConfidence = nhlMatches.filter(m => (m.analysis?.insights?.confidence || 0) >= 70);
+
+  const filteredMatches = activeFilter === 'value' ? valueBets 
+    : activeFilter === 'high' ? highConfidence 
+    : nhlMatches;
+
+  return (
+    <div style={{ marginBottom: '12px' }}>
+      {/* Header */}
+      <div style={{ marginBottom: '12px' }}>
+        <h2 style={{
+          fontSize: '16px',
+          fontWeight: 'bold',
+          color: '#06b6d4',
+          marginBottom: '4px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          🏒 NHL Hockey PRO
+        </h2>
+        <p style={{ color: '#888', fontSize: '11px', marginBottom: '4px' }}>
+          Prédictions basées sur xGF%, HDCF%, PDO et GSAx
+        </p>
+        <p style={{ color: '#666', fontSize: '10px' }}>
+          Mise à jour: {lastUpdate.toLocaleTimeString('fr-FR')} • {nhlMatches.length} matchs
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div style={{
+        display: 'flex',
+        gap: '6px',
+        marginBottom: '12px',
+        flexWrap: 'wrap'
+      }}>
+        <button
+          onClick={() => setActiveFilter('all')}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            border: activeFilter === 'all' ? '1px solid #06b6d4' : '1px solid #333',
+            background: activeFilter === 'all' ? '#06b6d4' : 'transparent',
+            color: activeFilter === 'all' ? '#fff' : '#888',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: activeFilter === 'all' ? 'bold' : 'normal'
+          }}
+        >
+          📋 Tous ({nhlMatches.length})
+        </button>
+        <button
+          onClick={() => setActiveFilter('value')}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            border: activeFilter === 'value' ? '1px solid #22c55e' : '1px solid #333',
+            background: activeFilter === 'value' ? '#22c55e' : 'transparent',
+            color: activeFilter === 'value' ? '#fff' : '#888',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: activeFilter === 'value' ? 'bold' : 'normal'
+          }}
+        >
+          💰 Value ({valueBets.length})
+        </button>
+        <button
+          onClick={() => setActiveFilter('high')}
+          style={{
+            padding: '6px 12px',
+            borderRadius: '6px',
+            border: activeFilter === 'high' ? '1px solid #f97316' : '1px solid #333',
+            background: activeFilter === 'high' ? '#f97316' : 'transparent',
+            color: activeFilter === 'high' ? '#fff' : '#888',
+            cursor: 'pointer',
+            fontSize: '11px',
+            fontWeight: activeFilter === 'high' ? 'bold' : 'normal'
+          }}
+        >
+          ⭐ Confiance ({highConfidence.length})
+        </button>
+      </div>
+
+      {/* Loading */}
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>⏳</div>
+          <span style={{ fontSize: '12px' }}>Chargement NHL...</span>
+        </div>
+      ) : error ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#ef4444' }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>❌</div>
+          <span style={{ fontSize: '12px' }}>{error}</span>
+        </div>
+      ) : filteredMatches.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+          <div style={{ fontSize: '24px', marginBottom: '8px' }}>🏒</div>
+          <span style={{ fontSize: '12px' }}>Aucun match NHL prévu</span>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {filteredMatches.map((match, index) => (
+            <NHLMatchCard key={match.id} match={match} index={index + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// NHL Match Card Component
+function NHLMatchCard({ match, index }: { match: NHLMatch; index: number }) {
+  const analysis = match.analysis;
+  const isHomeFavorite = analysis.projected.homeWinProb > analysis.projected.awayWinProb;
+  const winnerTeam = isHomeFavorite ? match.homeTeam : match.awayTeam;
+  const winnerProb = isHomeFavorite ? analysis.projected.homeWinProb : analysis.projected.awayWinProb;
+  
+  const confidenceColor = analysis.insights.confidence >= 70 ? '#22c55e' 
+    : analysis.insights.confidence >= 50 ? '#f97316' : '#ef4444';
+  
+  const hasValueBet = analysis.insights.moneyline.valueBet.detected;
+  const valueEdge = analysis.insights.moneyline.valueBet.edge;
+
+  return (
+    <div style={{
+      background: 'linear-gradient(135deg, #1a1a1a 0%, #0d1520 100%)',
+      borderRadius: '12px',
+      padding: '14px',
+      border: hasValueBet ? '1px solid #22c55e50' : '1px solid #06b6d430',
+      boxShadow: hasValueBet ? '0 4px 20px rgba(34, 197, 94, 0.1)' : '0 4px 20px rgba(6, 182, 212, 0.05)'
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '12px'
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            background: '#06b6d4',
+            color: '#fff',
+            width: '26px',
+            height: '26px',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '12px',
+            fontWeight: 'bold'
+          }}>{index}</span>
+          <span style={{ fontSize: '11px', color: '#888' }}>🏒 NHL</span>
+          {match.isLive && (
+            <span style={{
+              background: '#ef4444',
+              color: '#fff',
+              padding: '2px 6px',
+              borderRadius: '4px',
+              fontSize: '9px',
+              fontWeight: 'bold',
+              animation: 'pulse 1s infinite'
+            }}>LIVE</span>
+          )}
+        </div>
+        <div style={{
+          background: `${confidenceColor}20`,
+          padding: '4px 8px',
+          borderRadius: '4px',
+          fontSize: '10px',
+          color: confidenceColor,
+          fontWeight: 'bold'
+        }}>
+          {analysis.insights.confidence}% conf.
+        </div>
+      </div>
+
+      {/* Teams */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '12px',
+        padding: '10px',
+        background: '#111',
+        borderRadius: '10px'
+      }}>
+        {/* Home Team */}
+        <div style={{
+          flex: 1,
+          textAlign: 'center',
+          padding: '8px',
+          borderRadius: '8px',
+          background: isHomeFavorite ? 'linear-gradient(135deg, #06b6d420 0%, #06b6d410 100%)' : 'transparent',
+          border: isHomeFavorite ? '2px solid #06b6d4' : '2px solid transparent'
+        }}>
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 'bold',
+            color: isHomeFavorite ? '#06b6d4' : '#fff',
+            marginBottom: '4px'
+          }}>
+            {isHomeFavorite && '⭐ '}{match.homeTeam}
+          </div>
+          <div style={{ fontSize: '10px', color: '#888' }}>🏠 Domicile</div>
+          <div style={{
+            marginTop: '6px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            color: isHomeFavorite ? '#06b6d4' : '#888'
+          }}>
+            {Math.round(analysis.projected.homeWinProb * 100)}%
+          </div>
+        </div>
+
+        {/* Score Projected */}
+        <div style={{ padding: '0 10px', textAlign: 'center' }}>
+          <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#fff' }}>
+            {analysis.projected.homeGoals} - {analysis.projected.awayGoals}
+          </div>
+          <div style={{ fontSize: '9px', color: '#666' }}>Projeté</div>
+        </div>
+
+        {/* Away Team */}
+        <div style={{
+          flex: 1,
+          textAlign: 'center',
+          padding: '8px',
+          borderRadius: '8px',
+          background: !isHomeFavorite ? 'linear-gradient(135deg, #f9731620 0%, #f9731610 100%)' : 'transparent',
+          border: !isHomeFavorite ? '2px solid #f97316' : '2px solid transparent'
+        }}>
+          <div style={{
+            fontSize: '13px',
+            fontWeight: 'bold',
+            color: !isHomeFavorite ? '#f97316' : '#fff',
+            marginBottom: '4px'
+          }}>
+            {!isHomeFavorite && '⭐ '}{match.awayTeam}
+          </div>
+          <div style={{ fontSize: '10px', color: '#888' }}>✈️ Extérieur</div>
+          <div style={{
+            marginTop: '6px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            color: !isHomeFavorite ? '#f97316' : '#888'
+          }}>
+            {Math.round(analysis.projected.awayWinProb * 100)}%
+          </div>
+        </div>
+      </div>
+
+      {/* Key Stats Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(4, 1fr)',
+        gap: '6px',
+        marginBottom: '10px'
+      }}>
+        <div style={{ background: '#1a1a1a', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '9px', color: '#666', marginBottom: '2px' }}>xGF%</div>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#06b6d4' }}>
+            {(match.homeTeamStats?.powerRating?.xGFPercent || 50).toFixed(1)}%
+          </div>
+        </div>
+        <div style={{ background: '#1a1a1a', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '9px', color: '#666', marginBottom: '2px' }}>PDO</div>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#a855f7' }}>
+            {(match.homeTeamStats?.powerRating?.PDO || 1000).toFixed(0)}
+          </div>
+        </div>
+        <div style={{ background: '#1a1a1a', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '9px', color: '#666', marginBottom: '2px' }}>xGF%</div>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#f97316' }}>
+            {(match.awayTeamStats?.powerRating?.xGFPercent || 50).toFixed(1)}%
+          </div>
+        </div>
+        <div style={{ background: '#1a1a1a', borderRadius: '6px', padding: '8px', textAlign: 'center' }}>
+          <div style={{ fontSize: '9px', color: '#666', marginBottom: '2px' }}>PDO</div>
+          <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#a855f7' }}>
+            {(match.awayTeamStats?.powerRating?.PDO || 1000).toFixed(0)}
+          </div>
+        </div>
+      </div>
+
+      {/* Betting Recommendations */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(2, 1fr)',
+        gap: '8px',
+        marginBottom: '10px'
+      }}>
+        {/* Spread */}
+        <div style={{
+          background: '#1a1a1a',
+          borderRadius: '8px',
+          padding: '10px'
+        }}>
+          <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>📊 SPREAD</div>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: analysis.insights.spread.recommendation === 'home' ? '#06b6d4' 
+              : analysis.insights.spread.recommendation === 'away' ? '#f97316' : '#888'
+          }}>
+            {analysis.insights.spread.recommendation === 'home' ? `✅ ${match.homeTeam}` 
+              : analysis.insights.spread.recommendation === 'away' ? `✅ ${match.awayTeam}` 
+              : '⏳ Pass'}
+          </div>
+          <div style={{ fontSize: '9px', color: '#666' }}>
+            Confiance: {analysis.insights.spread.confidence}%
+          </div>
+        </div>
+
+        {/* Total */}
+        <div style={{
+          background: '#1a1a1a',
+          borderRadius: '8px',
+          padding: '10px'
+        }}>
+          <div style={{ fontSize: '10px', color: '#888', marginBottom: '4px' }}>📈 TOTAL</div>
+          <div style={{
+            fontSize: '14px',
+            fontWeight: 'bold',
+            color: analysis.insights.total.recommendation === 'over' ? '#22c55e' 
+              : analysis.insights.total.recommendation === 'under' ? '#ef4444' : '#888'
+          }}>
+            {analysis.insights.total.recommendation === 'over' ? '⬆️ Over' 
+              : analysis.insights.total.recommendation === 'under' ? '⬇️ Under' 
+              : '⏳ Pass'} {analysis.insights.total.line}
+          </div>
+          <div style={{ fontSize: '9px', color: '#666' }}>
+            Prédit: {analysis.insights.total.predicted}
+          </div>
+        </div>
+      </div>
+
+      {/* Injury Report */}
+      {(analysis.injuryReport.home.players.length > 0 || analysis.injuryReport.away.players.length > 0) && (
+        <div style={{
+          background: 'rgba(239, 68, 68, 0.1)',
+          border: '1px solid rgba(239, 68, 68, 0.3)',
+          borderRadius: '8px',
+          padding: '10px',
+          marginBottom: '10px'
+        }}>
+          <div style={{ fontSize: '11px', color: '#ef4444', fontWeight: 'bold', marginBottom: '6px' }}>
+            🏥 Blessures
+          </div>
+          <div style={{ fontSize: '10px', color: '#888' }}>
+            {analysis.injuryReport.summary}
+          </div>
+        </div>
+      )}
+
+      {/* Value Bet Badge */}
+      {hasValueBet && (
+        <div style={{
+          background: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+          borderRadius: '8px',
+          padding: '10px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div>
+            <div style={{ fontSize: '11px', color: '#fff', opacity: 0.9 }}>📌 VALUE BET</div>
+            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#fff' }}>
+              {analysis.insights.moneyline.valueBet.type === 'home' ? match.homeTeam : match.awayTeam}
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#fff' }}>
+              +{(valueEdge * 100).toFixed(1)}%
+            </div>
+            <div style={{ fontSize: '10px', color: '#fff', opacity: 0.8 }}>Edge</div>
           </div>
         </div>
       )}
