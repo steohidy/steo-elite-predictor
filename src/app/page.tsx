@@ -3188,7 +3188,7 @@ function MatchAnalysisSection({ username, matches }: { username: string; matches
     const matched = Array.from(allTeams).filter(team => {
       const sim = calculateSimilarity(input, team);
       return sim >= 40;
-    }).slice(0, 5);
+    }).slice(0, 4); // Limité à 4 suggestions pour Conseils Expert V2
     
     setSuggestions(prev => ({ ...prev, [type]: matched }));
   };

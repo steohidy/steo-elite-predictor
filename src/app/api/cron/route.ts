@@ -4,132 +4,128 @@
  * GET /api/cron?force=true
  * 
  * Tâches exécutées:
- * - 7h UTC: Déplacer les matchs NBA de la nuit vers "terminé"
- * - Vérification des résultats des matchs terminés
+ * - 7h UTC: Déplacer les matchs NBA de la nuit vers "terminé" + vérifier les résultats
+ * - Vérification des résultats des matchs terminés (Football + NBA)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 
-// Cache des matchs NBA de la nuit
-let nbaNightMatches: any[] = [];
-let lastNBACheck: Date | null = null;
-
 /**
- * Marque les matchs NBA comme terminés
- * Déplace les matchs NBA de la nuit (matchs qui ont eu lieu entre 00h et 07h UTC) vers "terminés"
+ * Vérifie les résultats NBA via ESPN API
  */
-async function markNBAMatchesFinished(): Promise<{ count: number; matches: any[] }> {
+async function checkNBAResults(): Promise<{ checked: number; results: any[] }> {
   try {
-    // Récupérer les matchs actuels
-    const baseUrl = process.env.VERCEL_URL 
-      ? `https://${process.env.VERCEL_URL}` 
-      : 'http://localhost:3000';
+    console.log('🏀 Vérification des résultats NBA...');
     
-    const response = await fetch(`${baseUrl}/api/matches`, {
-      cache: 'no-store'
-    });
+    // Récupérer les scores NBA d'hier via ESPN
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const dateStr = yesterday.toISOString().split('T')[0].replace(/-/g, '');
     
-    const data = await response.json();
-    const matches = data.matches || [];
+    const response = await fetch(
+      `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${dateStr}`,
+      { next: { revalidate: 0 } }
+    );
     
-    // Filtrer les matchs NBA de la nuit (matchs qui ont eu lieu entre 00h et 07h UTC)
-    const now = new Date();
-    const today7h = new Date(now);
-    today7h.setUTCHours(7, 0, 0, 0);
-    
-    const today0h = new Date(today7h);
-    today0h.setUTCHours(0, 0, 0, 0);
-    
-    console.log(`🕐 Recherche matchs NBA entre ${today0h.toISOString()} et ${today7h.toISOString()}`);
-    
-    // Matchs NBA qui ont commencé avant 7h UTC aujourd'hui
-    const nbaMatchesToFinish = matches.filter((m: any) => {
-      // Vérifier si c'est un match NBA/Basket
-      const isNBA = m.sport === 'Basket' || m.sport === 'NBA' || m.league === 'NBA';
-      if (!isNBA) return false;
-      
-      // Vérifier si pas déjà terminé
-      if (m.status === 'finished') return false;
-      
-      const matchDate = new Date(m.date);
-      const inTimeRange = matchDate >= today0h && matchDate < today7h;
-      
-      console.log(`  - ${m.homeTeam} vs ${m.awayTeam}: ${matchDate.toISOString()} (inRange: ${inTimeRange})`);
-      
-      return inTimeRange;
-    });
-    
-    // Marquer comme terminés
-    for (const match of nbaMatchesToFinish) {
-      match.status = 'finished';
-      match.finishedAt = now.toISOString();
-      match.finishedReason = 'auto_nba_night';
+    if (!response.ok) {
+      console.log('⚠️ Impossible de récupérer les scores NBA');
+      return { checked: 0, results: [] };
     }
     
-    // Mettre à jour le cache
-    nbaNightMatches = nbaMatchesToFinish;
-    lastNBACheck = now;
+    const data = await response.json();
+    const events = data.events || [];
     
-    console.log(`🏀 ${nbaMatchesToFinish.length} matchs NBA marqués comme terminés`);
+    const results = events.map((event: any) => {
+      const homeTeam = event.competitions[0]?.competitors?.find((c: any) => c.homeAway === 'home')?.team?.shortDisplayName || '';
+      const awayTeam = event.competitions[0]?.competitors?.find((c: any) => c.homeAway === 'away')?.team?.shortDisplayName || '';
+      const homeScore = parseInt(event.competitions[0]?.competitors?.find((c: any) => c.homeAway === 'home')?.score || '0');
+      const awayScore = parseInt(event.competitions[0]?.competitors?.find((c: any) => c.homeAway === 'away')?.score || '0');
+      const status = event.status?.type?.completed ? 'finished' : 'scheduled';
+      
+      return {
+        homeTeam,
+        awayTeam,
+        homeScore,
+        awayScore,
+        status,
+        date: event.date
+      };
+    }).filter((r: any) => r.status === 'finished');
     
-    return {
-      count: nbaMatchesToFinish.length,
-      matches: nbaMatchesToFinish.map((m: any) => ({
-        id: m.id,
-        homeTeam: m.homeTeam,
-        awayTeam: m.awayTeam,
-        date: m.date
-      }))
-    };
+    console.log(`✅ ${results.length} résultats NBA trouvés`);
+    
+    return { checked: results.length, results };
     
   } catch (error) {
-    console.error('Erreur marquage NBA terminés:', error);
-    return { count: 0, matches: [] };
+    console.error('Erreur vérification NBA:', error);
+    return { checked: 0, results: [] };
   }
 }
 
 /**
- * Vérifie les résultats des matchs terminés
+ * Vérifie les résultats Football via Football-Data API
  */
-async function checkFinishedResults(): Promise<{ verified: number }> {
+async function checkFootballResults(): Promise<{ checked: number }> {
   try {
     const baseUrl = process.env.VERCEL_URL 
       ? `https://${process.env.VERCEL_URL}` 
       : 'http://localhost:3000';
     
-    // Appeler l'API de vérification des résultats
-    await fetch(`${baseUrl}/api/results`, {
+    // Appeler l'API de vérification des résultats Football
+    const response = await fetch(`${baseUrl}/api/results`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ action: 'check_results' })
     });
     
-    return { verified: 1 };
+    const data = await response.json();
+    console.log(`⚽ Résultats Football vérifiés: ${data.checked || 0}`);
+    
+    return { checked: data.checked || 0 };
     
   } catch (error) {
-    console.error('Erreur vérification résultats:', error);
-    return { verified: 0 };
+    console.error('Erreur vérification Football:', error);
+    return { checked: 0 };
+  }
+}
+
+/**
+ * Met à jour les statistiques dans la base de données
+ */
+async function updateStats(): Promise<{ success: boolean }> {
+  try {
+    const baseUrl = process.env.VERCEL_URL 
+      ? `https://${process.env.VERCEL_URL}` 
+      : 'http://localhost:3000';
+    
+    // Forcer le refresh des stats
+    await fetch(`${baseUrl}/api/results?action=detailed_stats`, {
+      cache: 'no-store'
+    });
+    
+    console.log('📊 Stats mises à jour');
+    return { success: true };
+    
+  } catch (error) {
+    console.error('Erreur mise à jour stats:', error);
+    return { success: false };
   }
 }
 
 /**
  * GET - Exécuter les tâches cron
- * Vercel Cron appelle cette route automatiquement
  * 
  * Params:
  * - key: CRON_SECRET (optionnel)
- * - force: si true, exécute la tâche NBA même si ce n'est pas 7h UTC
+ * - force: si true, exécute toutes les tâches même si ce n'est pas 7h UTC
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const cronKey = searchParams.get('key');
   const force = searchParams.get('force') === 'true';
   
-  // Vérifier la clé de sécurité seulement si elle est configurée
+  // Vérifier la clé de sécurité seulement si elle est configurée ET fournie
   const expectedKey = process.env.CRON_SECRET;
-  
-  // Si une clé est attendue et fournie, la vérifier
-  // Sinon, autoriser l'accès (pour le développement et les appels manuels)
   if (expectedKey && cronKey && cronKey !== expectedKey) {
     return NextResponse.json({
       success: false,
@@ -146,22 +142,27 @@ export async function GET(request: NextRequest) {
   try {
     const hour = new Date().getUTCHours();
     
-    // Tâche 1: Marquer les matchs NBA comme terminés
-    // Exécuter si 7h UTC OU si force=true
+    // Tâches à exécuter à 7h UTC ou si force=true
     if (hour === 7 || force) {
-      console.log(`🕒 Exécution tâche NBA terminés (force: ${force})`);
-      const nbaResult = await markNBAMatchesFinished();
-      results.tasks.nba_finished = nbaResult;
+      console.log(`⏰ Exécution des tâches cron (${force ? 'forcé' : '7h UTC'})`);
+      
+      // 1. Vérifier les résultats NBA
+      const nbaResults = await checkNBAResults();
+      results.tasks.nba_results = nbaResults;
+      
+      // 2. Vérifier les résultats Football
+      const footballResults = await checkFootballResults();
+      results.tasks.football_results = footballResults;
+      
+      // 3. Mettre à jour les stats
+      const statsUpdate = await updateStats();
+      results.tasks.stats_update = statsUpdate;
+      
     } else {
-      results.tasks.nba_finished = { 
-        skipped: true, 
+      results.tasks.skipped = {
         reason: `Pas 7h UTC (actuellement ${hour}h). Ajoutez &force=true pour forcer.`
       };
     }
-    
-    // Tâche 2: Vérifier les résultats
-    const verifyResult = await checkFinishedResults();
-    results.tasks.verify_results = verifyResult;
     
     results.success = true;
     
@@ -174,7 +175,7 @@ export async function GET(request: NextRequest) {
 }
 
 /**
- * POST - Forcer l'exécution des tâches (admin)
+ * POST - Forcer l'exécution des tâches
  */
 export async function POST(request: NextRequest) {
   try {
@@ -184,25 +185,30 @@ export async function POST(request: NextRequest) {
     let result: any = {};
     
     switch (task) {
-      case 'nba_finished':
-        result = await markNBAMatchesFinished();
+      case 'nba_results':
+        result = await checkNBAResults();
         break;
         
-      case 'verify_results':
-        result = await checkFinishedResults();
+      case 'football_results':
+        result = await checkFootballResults();
+        break;
+        
+      case 'update_stats':
+        result = await updateStats();
         break;
         
       case 'all':
         result = {
-          nba_finished: await markNBAMatchesFinished(),
-          verify_results: await checkFinishedResults()
+          nba_results: await checkNBAResults(),
+          football_results: await checkFootballResults(),
+          stats_update: await updateStats()
         };
         break;
         
       default:
         return NextResponse.json({
           success: false,
-          error: 'Tâche inconnue. Utilisez: nba_finished, verify_results, ou all'
+          error: 'Tâche inconnue. Utilisez: nba_results, football_results, update_stats, ou all'
         }, { status: 400 });
     }
     

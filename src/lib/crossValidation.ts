@@ -247,8 +247,8 @@ function getTimingInfo(): TimingInfo {
 
 /**
  * Filtre et répartit les matchs selon le PLAN DÉFINITIF:
- * - Journée (00h-20h GMT): 4 matchs Football UNIQUEMENT
- * - Nuit (20h-00h GMT): 4 matchs NBA UNIQUEMENT
+ * - Journée (01h-20h UTC): Football (10 matchs max)
+ * - Nuit (20h-01h UTC): NBA (5 matchs max)
  * 
  * IMPORTANT: Les matchs NBA ne sont affichés QUE la nuit (après 20h UTC)
  */
@@ -269,17 +269,17 @@ function distributeMatchesByTimeSlot(
   const currentHour = timing.currentHour;
   
   // RÈGLE STRICTE:
-  // - 00h-20h UTC: Football UNIQUEMENT (4 matchs max)
-  // - 20h-00h UTC: NBA UNIQUEMENT (4 matchs max)
+  // - 00h-20h UTC: Football UNIQUEMENT (10 matchs max)
+  // - 20h-00h UTC: NBA UNIQUEMENT (5 matchs max)
   
   if (currentHour >= 20 || currentHour < 1) {
     // NUIT (20h-01h UTC): NBA uniquement
-    const selectedNBA = nbaMatches.slice(0, 4);
+    const selectedNBA = nbaMatches.slice(0, 5);
     console.log(`🌙 NUIT (${currentHour}h UTC): ${selectedNBA.length} matchs NBA`);
     return selectedNBA;
   } else {
     // JOURNÉE (01h-20h UTC): Football uniquement
-    const selectedFootball = footballMatches.slice(0, 4);
+    const selectedFootball = footballMatches.slice(0, 10);
     console.log(`☀️ JOURNÉE (${currentHour}h UTC): ${selectedFootball.length} matchs Football`);
     return selectedFootball;
   }
@@ -328,7 +328,7 @@ async function fetchOddsApiMatches(): Promise<any[]> {
         return hashA - hashB;
       });
       
-      const MIN_FOOTBALL_MATCHES = 4;
+      const MIN_FOOTBALL_MATCHES = 10;
 
       // ===== FOOTBALL: Récupérer jusqu'à 10 matchs =====
       for (const sport of shuffled) {
