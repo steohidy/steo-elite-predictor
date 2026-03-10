@@ -1,0 +1,80 @@
+// Prisma schema for Steo Élite Predictor
+// Supabase PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Table des pronostics
+model Prediction {
+  id              String    @id @default(cuid())
+  matchId         String    @unique
+  homeTeam        String
+  awayTeam        String
+  league          String
+  sport           String    @default("Foot")
+  matchDate       DateTime
+  oddsHome        Float
+  oddsDraw        Float?
+  oddsAway        Float
+  predictedResult String
+  predictedGoals  String?
+  predictedCards  String?
+  confidence      String    @default("medium")
+  riskPercentage  Int       @default(50)
+
+  // Résultats (null si match non terminé)
+  homeScore       Int?
+  awayScore       Int?
+  totalGoals      Int?
+  actualResult    String?
+  resultMatch     Boolean?
+  goalsMatch      Boolean?
+  cardsMatch      Boolean?
+
+  // Statut
+  status          String    @default("pending")
+
+  // Métadonnées
+  createdAt       DateTime  @default(now())
+  checkedAt       DateTime?
+  signature       String?
+
+  @@index([matchDate])
+  @@index([status])
+  @@index([sport])
+  @@index([riskPercentage])
+  @@map("predictions")
+}
+
+// Table pour les statistiques de bankroll
+model BankrollStats {
+  id              String    @id @default(cuid())
+  date            DateTime  @default(now())
+  balance         Float
+  totalBets       Int       @default(0)
+  wins            Int       @default(0)
+  losses          Int       @default(0)
+  profitLoss      Float     @default(0)
+
+  @@index([date])
+  @@map("bankroll_stats")
+}
+
+// Table pour les utilisateurs
+model User {
+  id              String    @id @default(cuid())
+  username        String    @unique
+  passwordHash    String
+  role            String    @default("user")
+  createdAt       DateTime  @default(now())
+  lastLogin       DateTime?
+
+  @@index([username])
+  @@map("users")
+}
