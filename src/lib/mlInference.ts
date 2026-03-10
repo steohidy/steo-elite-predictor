@@ -3,10 +3,13 @@
  * 
  * Ce module charge un modèle pré-entraîné et effectue des prédictions.
  * Aucun entraînement n'est effectué ici - uniquement de l'inférence rapide.
+ * 
+ * Intégration avec Poisson Engine pour les prédictions de scores exacts.
  */
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { PoissonEngine, TeamStrength } from './poissonEngine';
 
 // ===== INTERFACES =====
 
@@ -49,15 +52,36 @@ export interface MLPrediction {
       away: number;
     };
   };
-  markets: {
-    overUnder25: { over: number; under: number; recommendation: string };
-    btts: { yes: number; no: number; recommendation: string };
+  // Expected Goals (λ) depuis ML
+  expectedGoals: {
+    home: number;
+    away: number;
   };
+  markets: {
+    overUnder25: { 
+      over: number; 
+      under: number; 
+      recommendation: string 
+    };
+    btts: { 
+      yes: number; 
+      no: number; 
+      recommendation: string 
+    };
+  };
+  // Scores les plus probables (depuis Poisson)
+  likelyScores?: { score: string; prob: number }[];
   riskLevel: 'low' | 'medium' | 'high';
   valueBet: {
     detected: boolean;
     type?: 'home' | 'draw' | 'away';
     value?: number;
+  };
+  // Poisson details
+  poisson?: {
+    lambdaHome: number;
+    lambdaAway: number;
+    matrix: number[][];
   };
 }
 
@@ -223,7 +247,9 @@ class MLPredictorService {
   }
 
   /**
-   * Effectue une prédiction
+   * Effectue une prédiction complète en utilisant:
+   * 1. Le modèle ML pour les lambdas (expected goals)
+   * 2. La loi de Poisson pour les scores exacts et probabilités
    */
   async predict(input: MatchFeaturesInput): Promise<MLPrediction> {
     if (!this.initialized) {
@@ -261,86 +287,116 @@ class MLPredictorService {
 
     const [homeProb, drawProb, awayProb] = activation;
     
+    // ===== CALCUL DES LAMBDAS (Expected Goals) =====
+    // Utiliser les stats pour calculer les forces des équipes
+    const homeStats = input.homeStats || {};
+    const awayStats = input.awayStats || {};
+    
+    const homeStrength: TeamStrength = PoissonEngine.calculateTeamStrength(
+      homeStats.avgGoalsScored || 1.5,
+      homeStats.avgGoalsConceded || 1.2,
+      2.6 // Moyenne ligue
+    );
+    
+    const awayStrength: TeamStrength = PoissonEngine.calculateTeamStrength(
+      awayStats.avgGoalsScored || 1.3,
+      awayStats.avgGoalsConceded || 1.4,
+      2.6
+    );
+    
+    // Calculer les lambdas (expected goals)
+    const { lambdaHome, lambdaAway } = PoissonEngine.calculateLambdas(
+      homeStrength,
+      awayStrength,
+      1.5, // leagueAvgHomeGoals
+      1.2  // leagueAvgAwayGoals
+    );
+    
+    // ===== PRÉDICTION POISSON =====
+    const poissonResult = PoissonEngine.predictMatch(lambdaHome, lambdaAway);
+    
+    // Combiner ML + Poisson pour les probabilités (moyenne pondérée)
+    const combinedHome = Math.round((homeProb * 0.4 + poissonResult.homeWin * 0.6) * 1000) / 1000;
+    const combinedDraw = Math.round((drawProb * 0.4 + poissonResult.draw * 0.6) * 1000) / 1000;
+    const combinedAway = Math.round((awayProb * 0.4 + poissonResult.awayWin * 0.6) * 1000) / 1000;
+
     // Déterminer le résultat
     let predictedResult: 'home' | 'draw' | 'away';
     let confidence: number;
     
-    if (homeProb >= drawProb && homeProb >= awayProb) {
+    if (combinedHome >= combinedDraw && combinedHome >= combinedAway) {
       predictedResult = 'home';
-      confidence = homeProb;
-    } else if (drawProb >= homeProb && drawProb >= awayProb) {
+      confidence = combinedHome;
+    } else if (combinedDraw >= combinedHome && combinedDraw >= combinedAway) {
       predictedResult = 'draw';
-      confidence = drawProb;
+      confidence = combinedDraw;
     } else {
       predictedResult = 'away';
-      confidence = awayProb;
+      confidence = combinedAway;
     }
 
-    // Score prédit
-    const homeStats = input.homeStats || {};
-    const awayStats = input.awayStats || {};
-    const predictedHomeGoals = Math.round(
-      (homeStats.avgGoalsScored || 1.5) * 0.6 + (awayStats.avgGoalsConceded || 1.4) * 0.4
-    );
-    const predictedAwayGoals = Math.round(
-      (awayStats.avgGoalsScored || 1.3) * 0.6 + (homeStats.avgGoalsConceded || 1.2) * 0.4
-    );
+    // Score le plus probable depuis Poisson
+    const topScore = poissonResult.mostLikelyScores[0];
+    const predictedScore = topScore ? {
+      home: parseInt(topScore.score.split('-')[0]),
+      away: parseInt(topScore.score.split('-')[1])
+    } : { home: 1, away: 1 };
 
-    // Over/Under 2.5
-    const totalGoals = predictedHomeGoals + predictedAwayGoals;
-    const overProb = 1 / (1 + Math.exp(-(totalGoals - 2.5) * 2));
-    
-    // BTTS
-    const bttsProb = 1 / (1 + Math.exp(-(
-      (homeStats.avgGoalsScored || 1.5) - 0.8 +
-      (awayStats.avgGoalsScored || 1.3) - 0.8
-    )));
-
-    // Value bet detection
-    const impliedProb = 1 / input.oddsHome;
-    const valueGap = homeProb - impliedProb;
-    const valueBet = valueGap > 0.05 ? {
-      detected: true,
-      type: 'home' as const,
-      value: valueGap
-    } : {
-      detected: false
-    };
+    // Value bet detection (comparer avec les cotes)
+    const valueBet = PoissonEngine.detectValueBet(
+      poissonResult,
+      input.oddsHome,
+      input.oddsDraw,
+      input.oddsAway
+    );
 
     // Risk level
     let riskLevel: 'low' | 'medium' | 'high';
-    if (confidence > 0.6) riskLevel = 'low';
-    else if (confidence > 0.4) riskLevel = 'medium';
+    if (confidence > 0.55) riskLevel = 'low';
+    else if (confidence > 0.38) riskLevel = 'medium';
     else riskLevel = 'high';
 
     return {
       probabilities: {
-        home: Math.round(homeProb * 1000) / 1000,
-        draw: Math.round(drawProb * 1000) / 1000,
-        away: Math.round(awayProb * 1000) / 1000
+        home: combinedHome,
+        draw: combinedDraw,
+        away: combinedAway
       },
       predicted: {
         result: predictedResult,
         confidence: Math.round(confidence * 1000) / 1000,
-        score: {
-          home: predictedHomeGoals,
-          away: predictedAwayGoals
-        }
+        score: predictedScore
+      },
+      expectedGoals: {
+        home: lambdaHome,
+        away: lambdaAway
       },
       markets: {
         overUnder25: {
-          over: Math.round(overProb * 1000) / 1000,
-          under: Math.round((1 - overProb) * 1000) / 1000,
-          recommendation: overProb > 0.55 ? 'Over 2.5' : overProb < 0.45 ? 'Under 2.5' : 'Neutre'
+          over: poissonResult.over25,
+          under: poissonResult.under25,
+          recommendation: poissonResult.over25 > 0.55 ? 'Over 2.5' : 
+                         poissonResult.under25 > 0.55 ? 'Under 2.5' : 'Neutre'
         },
         btts: {
-          yes: Math.round(bttsProb * 1000) / 1000,
-          no: Math.round((1 - bttsProb) * 1000) / 1000,
-          recommendation: bttsProb > 0.55 ? 'Oui' : bttsProb < 0.45 ? 'Non' : 'Neutre'
+          yes: poissonResult.bttsYes,
+          no: poissonResult.bttsNo,
+          recommendation: poissonResult.bttsYes > 0.55 ? 'Oui' : 
+                         poissonResult.bttsNo > 0.55 ? 'Non' : 'Neutre'
         }
       },
+      likelyScores: poissonResult.mostLikelyScores,
       riskLevel,
-      valueBet
+      valueBet: {
+        detected: valueBet.detected,
+        type: valueBet.type || undefined,
+        value: valueBet.edge || undefined
+      },
+      poisson: {
+        lambdaHome,
+        lambdaAway,
+        matrix: poissonResult.scoreMatrix
+      }
     };
   }
 }
