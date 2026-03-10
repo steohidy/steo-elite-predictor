@@ -7,7 +7,7 @@
  * - Analyses pré-match
  */
 
-import { zaiWebSearch, zaiPageReader, isZaiAvailable } from './zaiInit';
+import { zaiWebSearch, zaiPageReader, isZaiAvailable, getZaiError } from './zaiInit';
 
 export interface NBANewsItem {
   title: string;
@@ -55,8 +55,8 @@ export async function searchNBATeamNews(teamName: string): Promise<NBATeamNews> 
   };
 
   // Vérifier si z-ai est disponible
-  if (!isZaiAvailable()) {
-    console.log('⚠️ z-ai SDK non disponible pour NBA news');
+  if (!(await isZaiAvailable())) {
+    console.log('⚠️ z-ai SDK non disponible:', getZaiError());
     return result;
   }
 
@@ -118,7 +118,7 @@ export async function searchNBAMatchupNews(
     matchupAnalysis: '',
   };
 
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return result;
   }
 
@@ -155,7 +155,7 @@ export async function getTodayNBAInjuries(): Promise<{
     players: string[];
   }>;
 }> {
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return { success: false, injuries: [] };
   }
 
@@ -209,7 +209,7 @@ export async function searchNBAPlayerStats(playerName: string): Promise<{
     news?: string;
   };
 }> {
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return { success: false, stats: {} };
   }
 

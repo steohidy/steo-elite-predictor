@@ -60,7 +60,7 @@ export async function searchFootballTeamNews(teamName: string): Promise<Football
   };
 
   // Vérifier si z-ai est disponible
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     console.log('⚠️ z-ai SDK non disponible pour Football news');
     return result;
   }
@@ -127,7 +127,7 @@ export async function searchFootballMatchupNews(
     predictedLineups: undefined as string | undefined,
   };
 
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return result;
   }
 
@@ -172,7 +172,7 @@ export async function getTeamInjuries(teamName: string): Promise<{
     returnDate?: string;
   }>;
 }> {
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return { success: false, injuries: [] };
   }
 
@@ -228,7 +228,7 @@ export async function searchTeamStats(teamName: string): Promise<{
   xGA?: number;
   news?: string;
 }> {
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return { success: false };
   }
 
@@ -254,7 +254,7 @@ export async function searchTeamStats(teamName: string): Promise<{
  * Récupère les dernières infos de transfert
  */
 export async function searchTransferNews(teamName?: string): Promise<FootballNewsItem[]> {
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     return [];
   }
 

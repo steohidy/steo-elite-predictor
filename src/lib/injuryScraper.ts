@@ -33,7 +33,7 @@ export async function scrapeFootballInjuries(teamName: string): Promise<InjuryIn
     return cached.data;
   }
 
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     console.log('⚠️ z-ai SDK non disponible pour injury scraper');
     return [];
   }
@@ -100,7 +100,7 @@ export async function scrapeNBAInjuries(teamName: string): Promise<InjuryInfo[]>
     return cached.data;
   }
 
-  if (!isZaiAvailable()) {
+  if (!(await isZaiAvailable())) {
     console.log('⚠️ z-ai SDK non disponible pour NBA injury scraper');
     return [];
   }

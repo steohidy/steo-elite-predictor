@@ -2,12 +2,17 @@
  * Module d'initialisation pour z-ai-web-dev-sdk
  * Gère la configuration pour le développement local et Vercel
  *
- * IMPORTANT: Sur Vercel, le SDK nécessite les variables d'environnement:
- * - ZAI_BASE_URL
- * - ZAI_API_KEY
- * - ZAI_CHAT_ID
- * - ZAI_TOKEN
- * - ZAI_USER_ID
+ * IMPORTANT: Le SDK nécessite un fichier .z-ai-config avec:
+ * {
+ *   "baseUrl": "...",
+ *   "apiKey": "...",
+ *   "chatId": "...",
+ *   "token": "...",
+ *   "userId": "..."
+ * }
+ *
+ * Sur Vercel, configurez les variables d'environnement:
+ * ZAI_BASE_URL, ZAI_API_KEY, ZAI_CHAT_ID, ZAI_TOKEN, ZAI_USER_ID
  */
 
 import ZAI from 'z-ai-web-dev-sdk';
@@ -29,22 +34,47 @@ let isInitialized = false;
 let initError: string | null = null;
 
 // Configuration depuis les variables d'environnement (pour Vercel)
-const ENV_CONFIG = {
-  baseUrl: process.env.ZAI_BASE_URL,
-  apiKey: process.env.ZAI_API_KEY,
-  chatId: process.env.ZAI_CHAT_ID,
-  token: process.env.ZAI_TOKEN,
-  userId: process.env.ZAI_USER_ID,
+const ENV_CONFIG: ZAIConfig = {
+  baseUrl: process.env.ZAI_BASE_URL || '',
+  apiKey: process.env.ZAI_API_KEY || '',
+  chatId: process.env.ZAI_CHAT_ID || '',
+  token: process.env.ZAI_TOKEN || '',
+  userId: process.env.ZAI_USER_ID || '',
 };
 
 // Détecter si on est sur Vercel
-const IS_VERCEL = process.env.VERCEL === '1' || process.env.VERCEL_ENV;
+const IS_VERCEL = process.env.VERCEL === '1' || !!process.env.VERCEL_ENV;
 
 /**
- * Charge la configuration depuis le fichier .z-ai-config
+ * Vérifie si la configuration env est valide
  */
-function loadConfigFile(): ZAIConfig | null {
-  // Chemins possibles pour le fichier de config
+function hasValidEnvConfig(): boolean {
+  return !!(ENV_CONFIG.baseUrl && ENV_CONFIG.apiKey && ENV_CONFIG.token);
+}
+
+/**
+ * Crée le fichier de config pour le SDK
+ * Le SDK cherche dans cet ordre: cwd, home, /etc
+ */
+function createConfigFile(config: ZAIConfig): string | null {
+  // Créer dans le cwd (current working directory)
+  // C'est le premier endroit où le SDK cherche
+  const cwdConfigPath = path.join(process.cwd(), '.z-ai-config');
+  
+  try {
+    fs.writeFileSync(cwdConfigPath, JSON.stringify(config, null, 2));
+    console.log(`✅ Fichier config z-ai créé: ${cwdConfigPath}`);
+    return cwdConfigPath;
+  } catch (error) {
+    console.error('❌ Erreur création fichier config:', error);
+    return null;
+  }
+}
+
+/**
+ * Charge la configuration depuis le fichier .z-ai-config existant
+ */
+function loadExistingConfig(): ZAIConfig | null {
   const configPaths = [
     path.join(process.cwd(), '.z-ai-config'),
     path.join(os.homedir(), '.z-ai-config'),
@@ -56,10 +86,10 @@ function loadConfigFile(): ZAIConfig | null {
       if (fs.existsSync(configPath)) {
         const content = fs.readFileSync(configPath, 'utf-8');
         const config = JSON.parse(content);
-        console.log(`✅ Config z-ai chargée depuis: ${configPath}`);
+        console.log(`✅ Config z-ai trouvée: ${configPath}`);
         return config;
       }
-    } catch (error) {
+    } catch {
       // Continuer au prochain chemin
     }
   }
@@ -74,39 +104,31 @@ async function initZAI(): Promise<void> {
   if (isInitialized) return;
 
   try {
-    // Essayer d'abord les variables d'environnement (Vercel)
-    if (ENV_CONFIG.baseUrl && ENV_CONFIG.apiKey && ENV_CONFIG.token) {
-      console.log('🔧 Initialisation z-ai depuis variables d\'environnement...');
+    // 1. Vérifier si un fichier de config existe déjà
+    const existingConfig = loadExistingConfig();
+    if (existingConfig) {
+      console.log('🔧 Initialisation z-ai depuis fichier existant...');
+      zaiInstance = await ZAI.create();
+      console.log('✅ SDK z-ai initialisé');
+      isInitialized = true;
+      return;
+    }
+
+    // 2. Si variables d'environnement présentes, créer le fichier
+    if (hasValidEnvConfig()) {
+      console.log('🔧 Création config z-ai depuis variables d\'environnement...');
       
-      // Le SDK z-ai-web-dev-sdk utilise un fichier de config
-      // On doit créer un fichier temporaire pour Vercel
-      const tmpConfigPath = path.join(os.tmpdir(), '.z-ai-config');
-      fs.writeFileSync(tmpConfigPath, JSON.stringify({
-        baseUrl: ENV_CONFIG.baseUrl,
-        apiKey: ENV_CONFIG.apiKey,
-        chatId: ENV_CONFIG.chatId || '',
-        token: ENV_CONFIG.token,
-        userId: ENV_CONFIG.userId || '',
-      }, null, 2));
-
-      zaiInstance = await ZAI.create();
-      console.log('✅ SDK z-ai initialisé (env vars)');
-      isInitialized = true;
-      return;
+      const configPath = createConfigFile(ENV_CONFIG);
+      if (configPath) {
+        zaiInstance = await ZAI.create();
+        console.log('✅ SDK z-ai initialisé (depuis env vars)');
+        isInitialized = true;
+        return;
+      }
     }
 
-    // Essayer le fichier de config (développement local)
-    const fileConfig = loadConfigFile();
-    if (fileConfig) {
-      console.log('🔧 Initialisation z-ai depuis fichier config...');
-      zaiInstance = await ZAI.create();
-      console.log('✅ SDK z-ai initialisé (fichier config)');
-      isInitialized = true;
-      return;
-    }
-
-    // Aucune configuration trouvée
-    initError = 'Configuration z-ai non trouvée. Configurez les variables d\'environnement ou le fichier .z-ai-config';
+    // 3. Pas de configuration disponible
+    initError = 'Configuration z-ai non trouvée. Variables d\'environnement requises: ZAI_BASE_URL, ZAI_API_KEY, ZAI_TOKEN';
     console.warn(`⚠️ ${initError}`);
     isInitialized = true;
 
@@ -114,6 +136,7 @@ async function initZAI(): Promise<void> {
     initError = error instanceof Error ? error.message : 'Erreur inconnue';
     console.error('❌ Erreur initialisation z-ai:', initError);
     isInitialized = true;
+    zaiInstance = null;
   }
 }
 
@@ -130,8 +153,12 @@ export async function getZAI(): Promise<Awaited<ReturnType<typeof ZAI.create>> |
 
 /**
  * Vérifie si le SDK est disponible
+ * Déclenche l'initialisation si nécessaire
  */
-export function isZaiAvailable(): boolean {
+export async function isZaiAvailable(): Promise<boolean> {
+  if (!isInitialized) {
+    await initZAI();
+  }
   return zaiInstance !== null;
 }
 
@@ -176,15 +203,19 @@ export async function zaiWebSearch(query: string, numResults: number = 5): Promi
       snippet: item.snippet || '',
     }));
 
+    console.log(`🔍 Web search "${query}": ${results.length} résultats`);
+    
     return {
       success: true,
       results,
     };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Erreur recherche web';
+    console.error('❌ Erreur web search:', errorMsg);
     return {
       success: false,
       results: [],
-      error: error instanceof Error ? error.message : 'Erreur recherche web',
+      error: errorMsg,
     };
   }
 }
@@ -210,15 +241,23 @@ export async function zaiPageReader(url: string): Promise<{
   try {
     const result = await zai.functions.invoke('page_reader', { url });
     
+    const content = typeof result === 'string' 
+      ? result 
+      : JSON.stringify(result);
+    
+    console.log(`📄 Page reader: ${url} (${content.length} chars)`);
+    
     return {
       success: true,
-      content: typeof result === 'string' ? result : JSON.stringify(result),
+      content,
     };
   } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : 'Erreur lecture page';
+    console.error('❌ Erreur page reader:', errorMsg);
     return {
       success: false,
       content: '',
-      error: error instanceof Error ? error.message : 'Erreur lecture page',
+      error: errorMsg,
     };
   }
 }
