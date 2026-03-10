@@ -277,3 +277,109 @@ Output (3 neurons, Softmax)
 - **Taille modèle** : ~100 KB JSON
 - **Mémoire** : Minimal (pas de GPU requis)
 - **Accuracy cible** : 55-65% (baseline)
+
+---
+
+## 🔧 2024-03-07 - Poisson Engine & Automation
+
+### Poisson Distribution - Le "Saint Graal"
+
+La loi de Poisson est la formule mathématique parfaite pour le football:
+
+```
+P(k;λ) = (λ^k * e^-λ) / k!
+```
+
+- **k** : Nombre de buts (0, 1, 2, 3...)
+- **λ** : Expected Goals (depuis le ML)
+
+#### Avantages
+
+| Aspect | ML seul | ML + Poisson |
+|--------|---------|--------------|
+| Scores exacts | ❌ | ✅ Matrice 8x8 |
+| Over/Under | Approx | ✅ Probabilité précise |
+| BTTS | Approx | ✅ Calcul exact |
+| Performance | ~50ms | **< 1ms** |
+| Interprétabilité | Boîte noire | ✅ Clair |
+
+### Architecture Finale
+
+```
+┌─────────────────┐
+│   APIs Sport    │
+│  ESPN/Football  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Feature Engine  │
+│ Rolling Average │
+│ 19 features     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   ML Model      │
+│ Prédit λ (xG)   │
+│ 34 → 64 → 32 → 3│
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Poisson Engine  │
+│ Probabilités    │
+│ Scores exacts   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   Prédiction    │
+│ 1N2 + Over/Under│
+│ BTTS + Value Bet│
+└─────────────────┘
+```
+
+### GitHub Action - Entraînement Automatique
+
+**Fichier**: `.github/workflows/daily-ml-training.yml`
+
+**Schedule**: Tous les jours à 00h UTC
+
+**Étapes**:
+1. Récupération des résultats (ESPN NBA + Football-Data)
+2. Calcul des features (Rolling Average)
+3. Entraînement du modèle
+4. Validation (accuracy > 40%)
+5. Push vers GitHub → Vercel redéploie
+
+**Secrets requis**:
+- `API_FOOTBALL_KEY`
+- `THE_ODDS_API_KEY`
+- `FOOTBALL_DATA_API_KEY`
+
+### Fichiers Ajoutés
+
+```
+src/lib/
+├── poissonEngine.ts     # Distribution de Poisson
+├── mlInference.ts       # Intégration ML + Poisson
+
+scripts/
+├── fetch-results.ts     # Récupération résultats
+├── validate-model.ts    # Validation modèle
+
+.github/workflows/
+└── daily-ml-training.yml # CI/CD automatique
+```
+
+### Variables Complexes Intégrées
+
+| Variable | Description | Calcul |
+|----------|-------------|--------|
+| `homeAdvantage` | Différence perf dom/ext | `(homeWinRate - awayWinRate) + 0.1` |
+| `fatigueDiff` | Jours de repos | `awayRestDays - homeRestDays` |
+| `motivation` | Enjeu du match | `high` si top/bottom 5 |
+| `form` | Forme récente | Pondérée sur 5 matchs |
+| `attackStrength` | Force offensive | `avgGoals / leagueAvg` |
+| `defenseStrength` | Force défensive | `2 - (avgConceded / leagueAvg)` |
