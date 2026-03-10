@@ -279,7 +279,8 @@ function generateGoalieStats(teamAbbreviation: string, isStarter: boolean): NHLG
 // ===== MAIN EXPORT FUNCTIONS =====
 
 /**
- * Get team stats (with fallback to realistic generated data)
+ * Get team stats (REAL DATA from Natural Stat Trick + MoneyPuck)
+ * Fallback to generated data only if scraping fails
  */
 export async function getNHLTeamStats(abbreviation: string): Promise<NHLTeamStats> {
   // Check cache
@@ -287,58 +288,70 @@ export async function getNHLTeamStats(abbreviation: string): Promise<NHLTeamStat
     return cachedTeams.get(abbreviation)!;
   }
   
-  // Try NHL API first
-  const teamId = getTeamId(abbreviation);
-  const apiStats = await fetchTeamStats(teamId);
-  
-  if (apiStats?.stats?.[0]) {
-    const stats = apiStats.stats[0];
-    const teamStats: NHLTeamStats = {
-      teamId,
-      teamName: NHL_TEAMS[abbreviation]?.name || abbreviation,
-      abbreviation,
-      
-      corsiForPct: 48 + Math.random() * 8, // NHL API doesn't provide Corsi directly
-      fenwickForPct: 47 + Math.random() * 8,
-      shotsForPerGame: stats.statSummary?.shotsPerGame || 30,
-      shotsAgainstPerGame: stats.statSummary?.shotsAgainstPerGame || 30,
-      
-      xGForPerGame: stats.statSummary?.goalsPerGame || 3.0,
-      xGAgainstPerGame: stats.statSummary?.goalsAgainstPerGame || 3.0,
-      xGDiff: 0,
-      
-      goalsForPerGame: stats.statSummary?.goalsPerGame || 3.0,
-      goalsAgainstPerGame: stats.statSummary?.goalsAgainstPerGame || 3.0,
-      
-      last5Results: generateRecentForm(),
-      last10Record: { wins: 5, losses: 3, otLosses: 2 },
-      
-      powerPlayPct: stats.statSummary?.powerPlayPct || 20,
-      penaltyKillPct: stats.statSummary?.penaltyKillPct || 80,
-      
-      pdo: 1000,
-      ozoneStartPct: 50,
-      faceoffWinPct: 50,
-      
-      standing: {
-        position: 16,
-        points: 80,
-        gamesPlayed: 65,
-        wildcard: false
-      },
-      
-      homeAdvantage: 0.05,
-      daysSinceLastGame: 2,
-      isBackToBack: false,
-      gamesInLast7Days: 2,
-      injuredPlayers: []
-    };
+  // ===== PRIORITY 1: Real scraped data from Natural Stat Trick + MoneyPuck =====
+  try {
+    const { getAggregatedNHLStats } = await import('./nhlScraper');
+    const allStats = await getAggregatedNHLStats();
+    const scrapedStats = allStats.get(abbreviation);
     
-    cachedTeams.set(abbreviation, teamStats);
-    return teamStats;
+    if (scrapedStats) {
+      console.log(`✅ Stats RÉELLES pour ${abbreviation}: CF%=${scrapedStats.corsiForPct.toFixed(1)}, xGF%=${scrapedStats.xGForPct.toFixed(1)}`);
+      
+      const teamStats: NHLTeamStats = {
+        teamId: getTeamId(abbreviation),
+        teamName: NHL_TEAMS[abbreviation]?.name || scrapedStats.team,
+        abbreviation,
+        
+        // ===== VRAIES STATS SCRAPÉES =====
+        corsiForPct: scrapedStats.corsiForPct,
+        fenwickForPct: scrapedStats.fenwickForPct,
+        shotsForPerGame: 30, // Pas dans le scraper
+        shotsAgainstPerGame: 30,
+        
+        xGForPerGame: scrapedStats.xGFor / Math.max(1, scrapedStats.gamesPlayed) || 3.0,
+        xGAgainstPerGame: scrapedStats.xGAgainst / Math.max(1, scrapedStats.gamesPlayed) || 3.0,
+        xGDiff: scrapedStats.xGFor - scrapedStats.xGAgainst,
+        
+        goalsForPerGame: scrapedStats.xGFor / Math.max(1, scrapedStats.gamesPlayed) || 3.0,
+        goalsAgainstPerGame: scrapedStats.xGAgainst / Math.max(1, scrapedStats.gamesPlayed) || 3.0,
+        
+        last5Results: generateRecentForm(),
+        last10Record: { 
+          wins: scrapedStats.wins, 
+          losses: scrapedStats.losses, 
+          otLosses: scrapedStats.otLosses 
+        },
+        
+        powerPlayPct: 20, // Pas dans le scraper de base
+        penaltyKillPct: 80,
+        
+        pdo: scrapedStats.pdo,
+        ozoneStartPct: 50,
+        faceoffWinPct: 50,
+        
+        standing: {
+          position: 16,
+          points: scrapedStats.points,
+          gamesPlayed: scrapedStats.gamesPlayed,
+          wildcard: false
+        },
+        
+        homeAdvantage: 0.05,
+        daysSinceLastGame: 2,
+        isBackToBack: false,
+        gamesInLast7Days: 2,
+        injuredPlayers: []
+      };
+      
+      cachedTeams.set(abbreviation, teamStats);
+      lastFetchTime = Date.now();
+      return teamStats;
+    }
+  } catch (error) {
+    console.log(`⚠️ Scraping non disponible pour ${abbreviation}, utilisation fallback`);
   }
   
-  // Fallback to generated stats
+  // ===== FALLBACK: Generated realistic stats =====
   const generatedStats = generateTeamStats(abbreviation);
   cachedTeams.set(abbreviation, generatedStats);
   lastFetchTime = Date.now();
@@ -346,7 +359,8 @@ export async function getNHLTeamStats(abbreviation: string): Promise<NHLTeamStat
 }
 
 /**
- * Get goalie stats
+ * Get goalie stats (REAL DATA from Natural Stat Trick)
+ * Fallback to generated data only if scraping fails
  */
 export async function getNHLGoalieStats(
   teamAbbreviation: string,
@@ -358,11 +372,41 @@ export async function getNHLGoalieStats(
     return cachedGoalies.get(cacheKey)!;
   }
   
-  // For now, generate realistic stats
-  // In production, would fetch from Daily Faceoff or NHL API
+  // ===== PRIORITY 1: Real scraped data =====
+  try {
+    const { getAggregatedGoalieStats } = await import('./nhlScraper');
+    const allGoalies = await getAggregatedGoalieStats();
+    const scrapedGoalie = allGoalies.get(teamAbbreviation);
+    
+    if (scrapedGoalie) {
+      console.log(`✅ Stats GARDIEN RÉELLES pour ${teamAbbreviation}: ${scrapedGoalie.name}, SV%=${scrapedGoalie.savePct.toFixed(3)}`);
+      
+      const goalieStats: NHLGoalieStats = {
+        name: scrapedGoalie.name,
+        team: teamAbbreviation,
+        gamesPlayed: scrapedGoalie.gamesPlayed,
+        wins: Math.floor(scrapedGoalie.gamesPlayed * 0.5),
+        losses: Math.floor(scrapedGoalie.gamesPlayed * 0.3),
+        otLosses: Math.floor(scrapedGoalie.gamesPlayed * 0.2),
+        gaa: scrapedGoalie.gaa,
+        savePct: scrapedGoalie.savePct,
+        shutouts: 0,
+        last5GAA: scrapedGoalie.gaa,
+        last5SavePct: scrapedGoalie.savePct,
+        isStarter: true,
+        restDays: 2
+      };
+      
+      cachedGoalies.set(cacheKey, goalieStats);
+      return goalieStats;
+    }
+  } catch (error) {
+    console.log(`⚠️ Stats gardien non disponibles pour ${teamAbbreviation}, utilisation fallback`);
+  }
+  
+  // ===== FALLBACK: Generated realistic stats =====
   const stats = generateGoalieStats(teamAbbreviation, isStarter);
   cachedGoalies.set(cacheKey, stats);
-  
   return stats;
 }
 

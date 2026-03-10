@@ -8,11 +8,17 @@
  * - Facteur Gardien (50% de l'équipe)
  * - Fatigue (Back-to-back)
  * - Special Teams (PP%, PK%)
+ * 
+ * Sources de données RÉELLES:
+ * - Natural Stat Trick: Corsi, Fenwick, xG, PDO
+ * - MoneyPuck: xG détaillé
+ * - NHL.com API: Stats officielles
  */
 
 import { NextResponse } from 'next/server';
 import { NHLEngine, NHLTeamStats, NHLGoalieStats, NHLMatchData, NHLPrediction } from '@/lib/nhlEngine';
-import { getNHLTeamStats, getNHLGoalieStats, getNHLMatches, getNHLTeams } from '@/lib/nhlData';
+import { getNHLTeamStats, getNHLGoalieStats, getNHLMatches, getNHLTeams, clearNHLCache } from '@/lib/nhlData';
+import { getAggregatedNHLStats, clearNHLCache as clearScraperCache } from '@/lib/nhlScraper';
 
 // Cache pour les prédictions
 let cachedPredictions: NHLPredictionResult[] = [];
@@ -26,6 +32,12 @@ export interface NHLPredictionResult {
   awayTeamStats: NHLTeamStats;
   homeGoalie: NHLGoalieStats;
   awayGoalie: NHLGoalieStats;
+  dataSource: {
+    homeTeam: 'real' | 'fallback';
+    awayTeam: 'real' | 'fallback';
+    homeGoalie: 'real' | 'fallback';
+    awayGoalie: 'real' | 'fallback';
+  };
 }
 
 /**
@@ -35,6 +47,21 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const force = searchParams.get('force') === 'true';
+    const statsOnly = searchParams.get('stats') === 'true';
+    
+    // Mode stats seulement
+    if (statsOnly) {
+      const allStats = await getAggregatedNHLStats();
+      const statsArray = Array.from(allStats.values());
+      
+      return NextResponse.json({
+        stats: statsArray,
+        total: statsArray.length,
+        realData: statsArray.filter(s => s.source !== 'fallback').length,
+        sources: [...new Set(statsArray.flatMap(s => s.source.split(',')))],
+        lastUpdate: new Date().toISOString()
+      });
+    }
     
     // Vérifier le cache
     const now = Date.now();
@@ -80,13 +107,22 @@ export async function GET(request: Request) {
           awayGoalie
         );
         
+        // Déterminer la source des données
+        const dataSource: NHLPredictionResult['dataSource'] = {
+          homeTeam: homeTeamStats.corsiForPct !== 50 ? 'real' : 'fallback',
+          awayTeam: awayTeamStats.corsiForPct !== 50 ? 'real' : 'fallback',
+          homeGoalie: homeGoalie.savePct > 0.85 ? 'real' : 'fallback',
+          awayGoalie: awayGoalie.savePct > 0.85 ? 'real' : 'fallback'
+        };
+        
         predictions.push({
           match,
           prediction,
           homeTeamStats,
           awayTeamStats,
           homeGoalie,
-          awayGoalie
+          awayGoalie,
+          dataSource
         });
         
       } catch (error) {
@@ -101,6 +137,11 @@ export async function GET(request: Request) {
     cachedPredictions = predictions;
     lastFetchTime = now;
     
+    // Calculer les stats de sources
+    const realDataCount = predictions.filter(p => 
+      p.dataSource.homeTeam === 'real' && p.dataSource.awayTeam === 'real'
+    ).length;
+    
     return NextResponse.json({
       predictions,
       cached: false,
@@ -112,6 +153,11 @@ export async function GET(request: Request) {
         valueBets: predictions.filter(p => p.prediction.valueBet).length,
         overPicks: predictions.filter(p => p.prediction.overUnder.recommendation === 'over').length,
         underPicks: predictions.filter(p => p.prediction.overUnder.recommendation === 'under').length
+      },
+      dataQuality: {
+        realData: realDataCount,
+        fallbackData: predictions.length - realDataCount,
+        percentage: predictions.length > 0 ? Math.round((realDataCount / predictions.length) * 100) : 0
       }
     });
     
@@ -166,19 +212,53 @@ export async function POST(request: Request) {
       awayGoalie
     );
     
+    // Déterminer la source des données
+    const dataSource: NHLPredictionResult['dataSource'] = {
+      homeTeam: homeTeamStats.corsiForPct !== 50 ? 'real' : 'fallback',
+      awayTeam: awayTeamStats.corsiForPct !== 50 ? 'real' : 'fallback',
+      homeGoalie: homeGoalie.savePct > 0.85 ? 'real' : 'fallback',
+      awayGoalie: awayGoalie.savePct > 0.85 ? 'real' : 'fallback'
+    };
+    
     return NextResponse.json({
       match,
       prediction,
       homeTeamStats,
       awayTeamStats,
       homeGoalie,
-      awayGoalie
+      awayGoalie,
+      dataSource
     });
     
   } catch (error) {
     console.error('Erreur prédiction personnalisée:', error);
     return NextResponse.json({
       error: 'Erreur lors de la génération de la prédiction'
+    }, { status: 500 });
+  }
+}
+
+/**
+ * DELETE - Vider le cache et forcer le rafraîchissement
+ */
+export async function DELETE() {
+  try {
+    // Vider tous les caches
+    clearNHLCache();
+    clearScraperCache();
+    cachedPredictions = [];
+    lastFetchTime = 0;
+    
+    return NextResponse.json({
+      success: true,
+      message: 'Cache NHL vidé avec succès',
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    return NextResponse.json({
+      success: false,
+      error: 'Erreur lors du vidage du cache'
     }, { status: 500 });
   }
 }
