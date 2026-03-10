@@ -1,9 +1,17 @@
 /**
  * Module d'initialisation pour z-ai-web-dev-sdk
  * 
- * SOLUTION SIMPLE: Passer la config DIRECTEMENT au constructeur ZAI
- * Pas besoin de fichier de config - on utilise les variables d'environnement
+ * Le SDK cherche le fichier .z-ai-config UNIQUEMENT dans:
+ * 1. process.cwd()/.z-ai-config
+ * 2. homedir()/.z-ai-config
+ * 3. /etc/.z-ai-config
+ * 
+ * Sur Vercel, on écrit dans process.cwd() qui peut être writable pendant l'exécution.
  */
+
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 
 // Configuration depuis les variables d'environnement
 interface ZAIConfig {
@@ -22,13 +30,68 @@ const CONFIG: ZAIConfig = {
   userId: process.env.ZAI_USER_ID || '7737fa81-0a8f-42f3-8d75-4ccad826a05d',
 };
 
-// Instance unique du SDK
+// Instance unique
 let zaiInstance: any = null;
 let isInitialized = false;
 let initError: string | null = null;
 
 /**
- * Initialise le SDK avec la config directe (pas de fichier!)
+ * Les 3 emplacements exacts où le SDK cherche le fichier (dans l'ordre)
+ */
+const SDK_CONFIG_PATHS = [
+  path.join(process.cwd(), '.z-ai-config'),
+  path.join(os.homedir(), '.z-ai-config'),
+  '/etc/.z-ai-config',
+];
+
+/**
+ * Vérifie si le fichier de config existe déjà
+ */
+function configExists(): string | null {
+  for (const p of SDK_CONFIG_PATHS) {
+    if (fs.existsSync(p)) {
+      try {
+        const content = fs.readFileSync(p, 'utf8');
+        const config = JSON.parse(content);
+        if (config.baseUrl && config.apiKey) {
+          console.log(`📦 z-ai: Config existant: ${p}`);
+          return p;
+        }
+      } catch {
+        // Fichier invalide, continuer
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Écrit le fichier de config aux emplacements du SDK
+ */
+function writeConfig(): string | null {
+  const content = JSON.stringify(CONFIG, null, 2);
+  
+  for (const p of SDK_CONFIG_PATHS) {
+    try {
+      fs.writeFileSync(p, content, 'utf8');
+      
+      // Vérifier qu'on peut le relire
+      const readBack = fs.readFileSync(p, 'utf8');
+      const parsed = JSON.parse(readBack);
+      if (parsed.baseUrl && parsed.apiKey) {
+        console.log(`✅ z-ai: Config écrit et vérifié: ${p}`);
+        return p;
+      }
+    } catch (err: any) {
+      console.log(`⚠️ z-ai: Impossible d'écrire ${p}: ${err.code || err.message}`);
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Initialise le SDK
  */
 async function initZAI(): Promise<void> {
   if (isInitialized) return;
@@ -37,14 +100,25 @@ async function initZAI(): Promise<void> {
   console.log('🔧 Initialisation z-ai SDK...');
 
   try {
-    // Import dynamique du SDK
+    // 1. Vérifier si un fichier existe déjà
+    let configPath = configExists();
+    
+    // 2. Sinon, essayer d'écrire
+    if (!configPath) {
+      configPath = writeConfig();
+    }
+    
+    if (!configPath) {
+      throw new Error('Impossible de créer le fichier de config (filesystem read-only)');
+    }
+    
+    // 3. Importer et créer le SDK
     const ZAI = await import('z-ai-web-dev-sdk');
+    zaiInstance = await ZAI.default.create();
     
-    // CRÉER DIRECTEMENT AVEC LA CONFIG - pas besoin de fichier!
-    zaiInstance = new ZAI.default(CONFIG);
-    
-    console.log('✅ SDK z-ai initialisé avec succès (config directe)');
+    console.log('✅ SDK z-ai initialisé avec succès');
     initError = null;
+    
   } catch (error) {
     initError = error instanceof Error ? error.message : 'Erreur inconnue';
     console.error('❌ Erreur initialisation z-ai:', initError);
