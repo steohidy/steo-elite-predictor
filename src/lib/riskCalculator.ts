@@ -3,6 +3,22 @@
  * VERSION CLIENT-SIDE SAFE (sans Prisma)
  */
 
+// ===== GÉNÉRATEUR DÉTERMINISTE (PRÉDICTIONS STABLES) =====
+function deterministicHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
+  }
+  return Math.abs(hash);
+}
+
+function seededRandom(seed: string): number {
+  const hash = deterministicHash(seed);
+  return (hash % 10000) / 10000;
+}
+
 // Interface locale pour les données de match (compatible client-side)
 export interface MatchData {
   id: string;
@@ -147,16 +163,17 @@ function estimateTrueProbability(match: MatchData, betType: 'home' | 'draw' | 'a
   const awayProb = (1 / awayOdds) / totalImplied;
   const drawProb = (1 / drawOdds) / totalImplied;
   
-  // Ajouter un facteur aléatoire pour la simulation
-  const randomFactor = 0.02 * (Math.random() - 0.5);
+  // Facteur déterministe basé sur le match pour stabilité
+  const matchSeed = `${match.homeTeam}-${match.awayTeam}-${match.date}-${betType}`;
+  const deterministicFactor = 0.02 * (seededRandom(matchSeed) - 0.5);
   
   switch (betType) {
     case 'home':
-      return Math.min(0.95, Math.max(0.05, homeProb + randomFactor));
+      return Math.min(0.95, Math.max(0.05, homeProb + deterministicFactor));
     case 'draw':
-      return Math.min(0.95, Math.max(0.05, drawProb + randomFactor));
+      return Math.min(0.95, Math.max(0.05, drawProb + deterministicFactor));
     case 'away':
-      return Math.min(0.95, Math.max(0.05, awayProb + randomFactor));
+      return Math.min(0.95, Math.max(0.05, awayProb + deterministicFactor));
     default:
       return 0.33;
   }
