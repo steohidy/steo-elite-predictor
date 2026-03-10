@@ -136,15 +136,23 @@ export async function GET() {
               awayTeam: match.awayTeam,
               league: match.league || 'Unknown',
               sport: match.sport || 'Foot',
-              matchDate: match.date,
+              matchDate: new Date(match.date),
               oddsHome: match.oddsHome,
               oddsDraw: match.oddsDraw,
               oddsAway: match.oddsAway,
               predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
-              predictedGoals: match.goalsPrediction?.prediction,
+              predictedGoals: match.goalsPrediction?.prediction ?? null,
+              predictedCards: null,
               confidence: match.insight?.confidence || 'medium',
-              riskPercentage: match.insight?.riskPercentage || 50
-            });
+              riskPercentage: match.insight?.riskPercentage || 50,
+              homeScore: null,
+              awayScore: null,
+              totalGoals: null,
+              actualResult: null,
+              resultMatch: null,
+              goalsMatch: null,
+              cardsMatch: null,
+            } as any);
           } catch (err) {
             // Ignorer si déjà existant
             console.log(`⚠️ Pronostic ${match.id} déjà existant ou erreur`);

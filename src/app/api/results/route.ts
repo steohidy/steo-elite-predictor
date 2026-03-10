@@ -212,11 +212,18 @@ export async function POST(request: Request) {
         oddsDraw: p.oddsDraw || null,
         oddsAway: p.oddsAway,
         predictedResult: p.predictedResult,
-        predictedGoals: p.predictedGoals,
-        predictedCards: p.predictedCards,
+        predictedGoals: p.predictedGoals ?? null,
+        predictedCards: p.predictedCards ?? null,
         confidence: p.confidence || 'medium',
-        riskPercentage: p.riskPercentage || 50
-      })));
+        riskPercentage: p.riskPercentage || 50,
+        homeScore: null,
+        awayScore: null,
+        totalGoals: null,
+        actualResult: null,
+        resultMatch: null,
+        goalsMatch: null,
+        cardsMatch: null,
+      } as any)));
 
       return NextResponse.json({
         success: true,

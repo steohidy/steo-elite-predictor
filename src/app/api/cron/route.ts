@@ -9,16 +9,13 @@ import PredictionStore from '@/lib/store';
 
 // Vérifier l'autorisation
 function isAuthorized(request: Request): boolean {
-  // Vérifier le header d'autorisation Vercel Cron
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET || 'steo-cron-secret-2026';
 
-  // Vercel ajoute automatiquement ce header pour les cron jobs
   if (authHeader === `Bearer ${cronSecret}`) {
     return true;
   }
 
-  // Aussi accepter les appels locaux en développement
   const host = request.headers.get('host') || '';
   if (host.includes('localhost') || host.includes('127.0.0.1')) {
     return true;
@@ -57,13 +54,21 @@ async function fetchMatches(): Promise<{ success: boolean; message: string; coun
           sport: match.sport || 'Foot',
           matchDate: new Date(match.date),
           oddsHome: match.oddsHome,
-          oddsDraw: match.oddsDraw,
+          oddsDraw: match.oddsDraw ?? null,
           oddsAway: match.oddsAway,
           predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
-          predictedGoals: match.goalsPrediction?.prediction,
+          predictedGoals: match.goalsPrediction?.prediction ?? null,
+          predictedCards: null,
           confidence: match.insight?.confidence || 'medium',
-          riskPercentage: match.insight?.riskPercentage || 50
-        });
+          riskPercentage: match.insight?.riskPercentage || 50,
+          homeScore: null,
+          awayScore: null,
+          totalGoals: null,
+          actualResult: null,
+          resultMatch: null,
+          goalsMatch: null,
+          cardsMatch: null,
+        } as any);
         savedCount++;
       } catch {
         // Ignorer si déjà existant
@@ -91,7 +96,6 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
       return { success: false, message: 'API key non configurée', checked: 0, correct: 0 };
     }
 
-    // Récupérer les résultats d'hier
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
@@ -115,7 +119,6 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
 
     const pendingPredictions = await PredictionStore.getPending();
 
-    // Fonction de normalisation des noms d'équipes
     const normalizeName = (name: string): string => {
       return name
         .toLowerCase()
@@ -153,7 +156,6 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
           const resultMatch = prediction.predictedResult === actualResult;
           if (resultMatch) correctCount++;
 
-          // Vérifier les buts
           let goalsMatch: boolean | undefined;
           if (prediction.predictedGoals) {
             const totalGoals = homeScore + awayScore;
@@ -171,7 +173,8 @@ async function verifyResults(): Promise<{ success: boolean; message: string; che
             awayScore,
             actualResult,
             resultMatch,
-            goalsMatch
+            goalsMatch,
+            cardsMatch: undefined
           });
 
           checkedCount++;
@@ -217,7 +220,6 @@ async function cleanup(): Promise<{ success: boolean; message: string; removed: 
  * GET - Handler pour les Cron Jobs Vercel
  */
 export async function GET(request: Request) {
-  // Vérifier l'autorisation
   if (!isAuthorized(request)) {
     return NextResponse.json(
       { error: 'Non autorisé', message: 'CRON_SECRET invalide' },
@@ -256,7 +258,6 @@ export async function GET(request: Request) {
       });
 
     case 'all':
-      // Exécuter toutes les tâches
       const [fetchRes, verifyRes] = await Promise.all([
         fetchMatches(),
         verifyResults()

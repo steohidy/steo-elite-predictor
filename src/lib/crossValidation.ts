@@ -25,8 +25,14 @@ interface CrossValidatedMatch {
   oddsDraw: number | null;
   oddsAway: number;
   status: string;
-  sources: string[]; // Nouveau: liste des sources
-  timeSlot?: 'day' | 'night'; // Créneau: day (Foot) ou night (NBA)
+  sources: string[];
+  timeSlot?: 'day' | 'night';
+  // Live score fields (NBA)
+  homeScore?: number;
+  awayScore?: number;
+  isLive?: boolean;
+  period?: number;
+  clock?: string;
   insight: {
     riskPercentage: number;
     valueBetDetected: boolean;
@@ -38,36 +44,33 @@ interface CrossValidatedMatch {
       dataQuality: 'high' | 'medium' | 'low';
     };
   };
-  // Prédictions Football
   goalsPrediction?: {
-    total: number; // Buts totaux attendus
-    over25: number; // Probabilité Over 2.5 buts (%)
-    under25: number; // Probabilité Under 2.5 buts (%)
-    over15: number; // Probabilité Over 1.5 buts (%)
-    bothTeamsScore: number; // Probabilité les deux marquent (%)
-    prediction: string; // Ex: "Over 2.5"
+    total: number;
+    over25: number;
+    under25: number;
+    over15: number;
+    bothTeamsScore: number;
+    prediction: string;
   };
   cardsPrediction?: {
-    total: number; // Cartons totaux attendus
-    over45: number; // Probabilité Over 4.5 cartons (%)
-    under45: number; // Probabilité Under 4.5 cartons (%)
-    redCardRisk: number; // Risque de carton rouge (%)
-    prediction: string; // Ex: "Under 4.5"
+    total: number;
+    over45: number;
+    under45: number;
+    redCardRisk: number;
+    prediction: string;
   };
   cornersPrediction?: {
-    total: number; // Corners totaux attendus
-    over85: number; // Probabilité Over 8.5 corners (%)
-    under85: number; // Probabilité Under 8.5 corners (%)
-    over95: number; // Probabilité Over 9.5 corners (%)
-    prediction: string; // Ex: "Over 8.5"
+    total: number;
+    over85: number;
+    under85: number;
+    over95: number;
+    prediction: string;
   };
-  // Prédictions avancées (Football)
   advancedPredictions?: {
-    btts: { yes: number; no: number }; // Les deux équipes marquent
-    correctScore: { home: number; away: number; prob: number }[]; // Scores exacts probables
-    halfTime: { home: number; draw: number; away: number }; // Résultat MT
+    btts: { yes: number; no: number };
+    correctScore: { home: number; away: number; prob: number }[];
+    halfTime: { home: number; draw: number; away: number };
   };
-  // Prédictions NBA spécifiques
   nbaPredictions?: {
     predictedWinner: 'home' | 'away';
     winnerTeam: string;
@@ -77,6 +80,16 @@ interface CrossValidatedMatch {
     topScorer: { team: string; player: string; predictedPoints: number };
     keyMatchup: string;
     confidence: 'high' | 'medium' | 'low';
+  };
+  // Injury analysis fields
+  injuryImpact?: 'low' | 'medium' | 'high' | 'none';
+  injuryReasoning?: string[];
+  injuryRecommendation?: string | null;
+  injuries?: {
+    home?: Array<{ player: string; injury: string; team: string }>;
+    away?: Array<{ player: string; injury: string; team: string }>;
+    homeTeam?: any;
+    awayTeam?: any;
   };
 }
 
@@ -463,7 +476,7 @@ async function fetchESPNNBAGames(): Promise<CrossValidatedMatch[]> {
           riskPercentage: predictions.riskPercentage,
           valueBetDetected: Math.abs(predictions.winProb.home - 50) > 25,
           valueBetType: predictions.winProb.home > 60 ? 'home' : predictions.winProb.away > 60 ? 'away' : null,
-          confidence: predictions.confidence,
+          confidence: predictions.confidence as 'low' | 'medium' | 'high',
           crossValidation: {
             sourcesCount: 1,
             oddsConsensus: true,
@@ -491,7 +504,7 @@ async function fetchESPNNBAGames(): Promise<CrossValidatedMatch[]> {
             predictedPoints: 25
           },
           keyMatchup: `${game.homeTeam} vs ${game.awayTeam}`,
-          confidence: predictions.confidence
+          confidence: predictions.confidence as 'low' | 'medium' | 'high'
         }
       };
       
@@ -1495,13 +1508,21 @@ export async function getCrossValidatedMatches(): Promise<{
       oddsDraw: match.oddsDraw,
       oddsAway: match.oddsAway,
       predictedResult: match.oddsHome < match.oddsAway ? 'home' : 'away',
-      predictedGoals: match.goalsPrediction?.prediction,
+      predictedGoals: match.goalsPrediction?.prediction ?? null,
+      predictedCards: null,
       confidence: match.insight.confidence,
-      riskPercentage: match.insight.riskPercentage
-    }));
+      riskPercentage: match.insight.riskPercentage,
+      homeScore: null,
+      awayScore: null,
+      totalGoals: null,
+      actualResult: null,
+      resultMatch: null,
+      goalsMatch: null,
+      cardsMatch: null,
+    } as any));
     
     if (predictionsToSave.length > 0) {
-      const saved = PredictionStore.addMany(predictionsToSave);
+      const saved = await PredictionStore.addMany(predictionsToSave);
       console.log(`💾 ${saved} pronostics sauvegardés automatiquement (risque ≤ 40%)`);
     }
   } catch (error) {
