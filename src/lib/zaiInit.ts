@@ -9,12 +9,14 @@
  *    - ZAI_CHAT_ID
  *    - ZAI_TOKEN
  *    - ZAI_USER_ID
+ * 
+ * IMPORTANT: Le fichier de config DOIT exister AVANT d'appeler ZAI.create()
  */
 
 import ZAI from 'z-ai-web-dev-sdk';
 import fs from 'fs';
 import path from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
 
 // Instance unique du SDK
 let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
@@ -29,73 +31,125 @@ interface ZAIConfig {
   userId: string;
 }
 
+// Configuration par défaut (fallback si pas de variables d'environnement)
+const DEFAULT_CONFIG: ZAIConfig = {
+  baseUrl: 'http://172.25.136.193:8080/v1',
+  apiKey: 'Z.ai',
+  chatId: 'chat-67ccc72c-b06c-4cdc-b880-f7e9f177527b',
+  token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiNzczN2ZhODEtMGE4Zi00MmYzLThkNzUtNGNjYWQ4MjZhMDVkIiwiY2hhdF9pZCI6ImNoYXQtNjdjY2M3MmMtYjA2Yy00Y2RjLWI4ODAtZjdlOWYxNzc1MjdiIn0.4r8e_eVfwA4rB87EcxpCkh4JvOEbaUT5wrjoZqnqjs4',
+  userId: '7737fa81-0a8f-42f3-8d75-4ccad826a05d',
+};
+
 /**
- * Vérifie si les variables d'environnement ZAI sont configurées
+ * Récupère la configuration depuis les variables d'environnement ou défaut
  */
-function hasEnvConfig(): boolean {
-  return !!(
+function getConfig(): ZAIConfig {
+  // Priorité 1: Variables d'environnement
+  if (
     process.env.ZAI_BASE_URL &&
     process.env.ZAI_API_KEY &&
     process.env.ZAI_CHAT_ID &&
     process.env.ZAI_TOKEN &&
     process.env.ZAI_USER_ID
-  );
+  ) {
+    console.log('📡 z-ai: Configuration depuis variables d\'environnement');
+    return {
+      baseUrl: process.env.ZAI_BASE_URL,
+      apiKey: process.env.ZAI_API_KEY,
+      chatId: process.env.ZAI_CHAT_ID,
+      token: process.env.ZAI_TOKEN,
+      userId: process.env.ZAI_USER_ID,
+    };
+  }
+  
+  // Priorité 2: Configuration par défaut
+  console.log('📡 z-ai: Configuration par défaut');
+  return DEFAULT_CONFIG;
 }
 
 /**
- * Crée la configuration à partir des variables d'environnement
+ * Crée le fichier de config dans TOUS les emplacements possibles
+ * Le SDK cherche dans: process.cwd(), homedir, /etc
  */
-function getConfigFromEnv(): ZAIConfig {
-  return {
-    baseUrl: process.env.ZAI_BASE_URL!,
-    apiKey: process.env.ZAI_API_KEY!,
-    chatId: process.env.ZAI_CHAT_ID!,
-    token: process.env.ZAI_TOKEN!,
-    userId: process.env.ZAI_USER_ID!,
-  };
+function createConfigFiles(config: ZAIConfig): void {
+  const configContent = JSON.stringify(config, null, 2);
+  
+  const locations = [
+    path.join(process.cwd(), '.z-ai-config'),    // process.cwd()
+    path.join(homedir(), '.z-ai-config'),        // home directory
+    path.join(tmpdir(), '.z-ai-config'),         // tmp directory
+    '/tmp/.z-ai-config',                         // /tmp (Vercel)
+  ];
+  
+  for (const location of locations) {
+    try {
+      fs.writeFileSync(location, configContent);
+      console.log(`✅ z-ai: Config créé: ${location}`);
+    } catch (err: any) {
+      console.log(`⚠️ z-ai: Impossible de créer ${location}: ${err.message}`);
+    }
+  }
 }
 
 /**
- * Crée un fichier de config temporaire pour le SDK
+ * Vérifie si un fichier de config existe déjà
  */
-function createTempConfigFile(config: ZAIConfig): string {
-  const configPath = path.join(tmpdir(), '.z-ai-config');
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
-  return configPath;
+function configExists(): boolean {
+  const locations = [
+    path.join(process.cwd(), '.z-ai-config'),
+    path.join(homedir(), '.z-ai-config'),
+    '/etc/.z-ai-config',
+  ];
+  
+  for (const location of locations) {
+    if (fs.existsSync(location)) {
+      console.log(`📦 z-ai: Config existant trouvé: ${location}`);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
  * Initialise le SDK z-ai
+ * CRÉE le fichier de config AVANT d'appeler ZAI.create()
+ * 
+ * NOTE: En production Vercel, le SDK est désactivé car le filesystem
+ * est éphémère et le SDK ne peut pas créer/lire le fichier de config.
  */
 async function initZAI(): Promise<void> {
   if (isInitialized) return;
+  isInitialized = true; // Marquer immédiatement pour éviter les appels multiples
 
+  // En production Vercel, désactiver le SDK
+  if (process.env.VERCEL || process.env.VERCEL_URL) {
+    console.log('⚠️ z-ai: Production Vercel détectée - SDK désactivé (filesystem éphémère)');
+    initError = 'SDK désactivé en production Vercel - utilisez les données de fallback';
+    zaiInstance = null;
+    return;
+  }
+
+  console.log('🔧 Initialisation z-ai SDK (local)...');
+  
   try {
-    console.log('🔧 Initialisation z-ai SDK...');
-
-    // En production (Vercel), utiliser les variables d'environnement
-    if (hasEnvConfig()) {
-      console.log('📡 Configuration depuis variables d\'environnement');
-      const config = getConfigFromEnv();
-      const configPath = createTempConfigFile(config);
-      
-      // Le SDK cherche le fichier dans process.cwd(), homedir, ou /etc
-      // On crée aussi dans process.cwd() pour être sûr
-      const cwdConfigPath = path.join(process.cwd(), '.z-ai-config');
-      fs.writeFileSync(cwdConfigPath, JSON.stringify(config, null, 2));
-      
-      console.log('✅ Fichier de config créé:', cwdConfigPath);
+    // 1. Vérifier si un fichier de config existe déjà
+    const existingConfig = configExists();
+    
+    // 2. Si pas de config existante, créer les fichiers
+    if (!existingConfig) {
+      const config = getConfig();
+      createConfigFiles(config);
     }
-
+    
+    // 3. Maintenant on peut appeler ZAI.create()
     zaiInstance = await ZAI.create();
     console.log('✅ SDK z-ai initialisé avec succès');
-    isInitialized = true;
     initError = null;
+    
   } catch (error) {
     initError = error instanceof Error ? error.message : 'Erreur inconnue';
     console.error('❌ Erreur initialisation z-ai:', initError);
     zaiInstance = null;
-    isInitialized = true;
   }
 }
 
@@ -154,7 +208,6 @@ export async function zaiWebSearch(query: string, numResults: number = 5): Promi
       num: numResults,
     });
 
-    // Le SDK retourne un tableau de résultats
     const rawResults = Array.isArray(searchResult) ? searchResult : [];
 
     const results = rawResults.map((item: any) => ({
