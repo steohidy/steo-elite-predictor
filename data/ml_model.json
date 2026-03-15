@@ -1,15 +1,15 @@
 {
   "thresholds": {
-    "edgeThreshold": 0.03,
-    "injuryImpactFactor": 1.0,
+    "edgeThreshold": 0.08,
+    "injuryImpactFactor": 1,
     "formWeight": 0.05,
     "xgWeight": 0.03,
     "netRatingWeight": 0.03,
     "confidenceWeights": {
       "very_high": 0.5,
-      "high": 0.4,
-      "medium": 0.25,
-      "low": 0.1
+      "high": 0.41999999999999993,
+      "medium": 0.258,
+      "low": 0.10799999999999998
     },
     "minDataQuality": 50,
     "sportSpecific": {
@@ -22,10 +22,10 @@
         "restDaysWeight": 0.01
       }
     },
-    "version": "1.0.0",
-    "lastUpdated": "",
-    "samplesUsed": 0,
-    "accuracy": 0
+    "version": "1.0.1",
+    "lastUpdated": "2026-03-15T07:35:42.390Z",
+    "samplesUsed": 54,
+    "accuracy": 46
   },
   "featureWeights": {
     "edge": 0.25,
@@ -36,7 +36,20 @@
     "netRating": 0.1,
     "confidence": 0.05
   },
-  "sportAdjustments": {},
-  "confidence": 0.5,
-  "trainingHistory": []
+  "sportAdjustments": {
+    "foot": {
+      "edgeThreshold": 0.04
+    },
+    "basket": {
+      "edgeThreshold": 0.04
+    }
+  },
+  "confidence": 0.608,
+  "trainingHistory": [
+    {
+      "date": "2026-03-15T07:35:42.391Z",
+      "samples": 54,
+      "accuracy": 46
+    }
+  ]
 }
