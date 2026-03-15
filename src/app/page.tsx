@@ -2527,7 +2527,8 @@ function AppDashboard({ onLogout, userInfo }: { onLogout: () => void; userInfo: 
         <NavButton icon="🏈" label="NFL" active={activeSection === 'nfl'} onClick={() => setActiveSection('nfl')} color="#3b82f6" />
         <NavButton icon="🏒" label="NHL" active={activeSection === 'nhl'} onClick={() => setActiveSection('nhl')} color="#06b6d4" />
         <NavButton icon="🎾" label="Tennis" active={activeSection === 'tennis'} onClick={() => setActiveSection('tennis')} color="#a855f7" />
-        <NavButton icon="🎯" label="Expert ML" active={activeSection === 'expert'} onClick={() => setActiveSection('expert')} color="#14b8a6" />
+        {/* Expert ML - MASQUÉ en mode apprentissage jusqu'à 70% de réussite sur 7 jours */}
+        {/* <NavButton icon="🎯" label="Expert ML" active={activeSection === 'expert'} onClick={() => setActiveSection('expert')} color="#14b8a6" /> */}
         <NavButton icon="🔍" label="Analyse" active={activeSection === 'analyse'} onClick={() => setActiveSection('analyse')} color="#8b5cf6" />
         <NavButton icon="🛡️" label="Trap" active={activeSection === 'antitrap'} onClick={() => setActiveSection('antitrap')} color="#ef4444" />
         <NavButton icon="📊" label="Stats" active={activeSection === 'results'} onClick={() => setActiveSection('results')} color="#eab308" />

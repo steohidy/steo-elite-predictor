@@ -41,6 +41,11 @@ jobs:
         env:
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
 
+      # ML Results Tracking - Suivi des performances
+      - name: Track ML results and calculate ratio
+        run: bun run scripts/ml-results-tracker.ts
+        continue-on-error: true
+
       # Tennis Data Collection
       - name: Fetch ATP WTA Rankings
         run: bun run scripts/fetch-tennis-rankings.ts
@@ -127,6 +132,19 @@ jobs:
             PRO_WR=$(cat data/pronostiqueur-pro.json | grep -o '"winRate": [0-9.]*' | head -1 | grep -o '[0-9.]*' || echo "0")
             PRO_ROI=$(cat data/pronostiqueur-pro.json | grep -o '"roi": [0-9.-]*' | grep -o '[0-9.-]*' || echo "0")
             echo "🎯 **Pronostiqueur Pro:** ${PRO_TOTAL} prédictions, ${PRO_WR}% WR, ${PRO_ROI}% ROI" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # ML Results Tracking
+          if [ -f data/ml-results-tracking.json ]; then
+            ML_VISIBLE=$(cat data/ml-results-tracking.json | grep -o '"expertMLVisible": [a-z]*' | grep -o '[a-z]*' || echo "false")
+            ML_RATIO=$(cat data/ml-results-tracking.json | grep -o '"weeklyRatio": [0-9]*' | grep -o '[0-9]*' || echo "0")
+            ML_WON=$(cat data/ml-results-tracking.json | grep -o '"won": [0-9]*' | head -1 | grep -o '[0-9]*' || echo "0")
+            ML_TOTAL=$(cat data/ml-results-tracking.json | grep -o '"total": [0-9]*' | head -1 | grep -o '[0-9]*' || echo "0")
+            if [ "$ML_VISIBLE" = "true" ]; then
+              echo "✅ **Expert ML:** VISIBLE - ${ML_WON}/${ML_TOTAL} réussis (${ML_RATIO}%)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⏳ **Expert ML:** En apprentissage - ${ML_WON}/${ML_TOTAL} (${ML_RATIO}%) - Besoin 70%+" >> $GITHUB_STEP_SUMMARY
+            fi
           fi
           
           # Football/Basket predictions
