@@ -1266,8 +1266,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.105Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.105Z",
+      "homeScore": 0,
+      "awayScore": 0,
+      "totalGoals": 0,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.494Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_740892",
@@ -1283,8 +1289,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.105Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.105Z",
+      "homeScore": 3,
+      "awayScore": 1,
+      "totalGoals": 4,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.494Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_740893",
@@ -1300,8 +1312,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.105Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.105Z",
+      "homeScore": 0,
+      "awayScore": 0,
+      "totalGoals": 0,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.494Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_740891",
@@ -1317,8 +1335,14 @@
       "predictedGoals": "Under 2.5 buts",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.105Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.105Z",
+      "homeScore": 1,
+      "awayScore": 1,
+      "totalGoals": 2,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.494Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_748421",
@@ -1334,8 +1358,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.121Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.121Z",
+      "homeScore": 2,
+      "awayScore": 1,
+      "totalGoals": 3,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": true
     },
     {
       "matchId": "fb_748415",
@@ -1351,8 +1381,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.121Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.121Z",
+      "homeScore": 5,
+      "awayScore": 2,
+      "totalGoals": 7,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": true
     },
     {
       "matchId": "fb_748417",
@@ -1368,8 +1404,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.121Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.121Z",
+      "homeScore": 1,
+      "awayScore": 1,
+      "totalGoals": 2,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_748420",
@@ -1385,8 +1427,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.121Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.121Z",
+      "homeScore": 3,
+      "awayScore": 1,
+      "totalGoals": 4,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746946",
@@ -1402,8 +1450,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.135Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.135Z",
+      "homeScore": 0,
+      "awayScore": 2,
+      "totalGoals": 2,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746945",
@@ -1419,8 +1473,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.135Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.135Z",
+      "homeScore": 0,
+      "awayScore": 1,
+      "totalGoals": 1,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746948",
@@ -1436,8 +1496,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.135Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.135Z",
+      "homeScore": 1,
+      "awayScore": 0,
+      "totalGoals": 1,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_737073",
@@ -1453,8 +1519,14 @@
       "predictedGoals": "Under 2.5 buts",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.149Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.149Z",
+      "homeScore": 0,
+      "awayScore": 2,
+      "totalGoals": 2,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_737069",
@@ -1470,8 +1542,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.149Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.149Z",
+      "homeScore": 3,
+      "awayScore": 1,
+      "totalGoals": 4,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": true
     },
     {
       "matchId": "fb_737068",
@@ -1487,8 +1565,14 @@
       "predictedGoals": "Over 2.5 buts",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.149Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.149Z",
+      "homeScore": 0,
+      "awayScore": 1,
+      "totalGoals": 1,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_737064",
@@ -1504,8 +1588,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.149Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.149Z",
+      "homeScore": 2,
+      "awayScore": 1,
+      "totalGoals": 3,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_737071",
@@ -1521,8 +1611,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.149Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.149Z",
+      "homeScore": 1,
+      "awayScore": 0,
+      "totalGoals": 1,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746645",
@@ -1538,8 +1634,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.161Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.161Z",
+      "homeScore": 0,
+      "awayScore": 0,
+      "totalGoals": 0,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746638",
@@ -1555,8 +1657,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.161Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.161Z",
+      "homeScore": 0,
+      "awayScore": 0,
+      "totalGoals": 0,
+      "actualResult": "draw",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": false
     },
     {
       "matchId": "fb_746641",
@@ -1572,8 +1680,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.161Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.161Z",
+      "homeScore": 3,
+      "awayScore": 4,
+      "totalGoals": 7,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.495Z",
+      "resultMatch": true
     },
     {
       "matchId": "fb_746643",
@@ -1606,8 +1720,14 @@
       "predictedGoals": "Les deux marquent",
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.162Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.162Z",
+      "homeScore": 1,
+      "awayScore": 2,
+      "totalGoals": 3,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": false
     },
     {
       "matchId": "nba_401810831",
@@ -1623,8 +1743,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 116,
+      "awayScore": 103,
+      "totalGoals": 219,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": true
     },
     {
       "matchId": "nba_401810832",
@@ -1640,8 +1766,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 120,
+      "awayScore": 130,
+      "totalGoals": 250,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": false
     },
     {
       "matchId": "nba_401810833",
@@ -1657,8 +1789,14 @@
       "predictedGoals": null,
       "confidence": "low",
       "riskPercentage": 45,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 119,
+      "awayScore": 108,
+      "totalGoals": 227,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": false
     },
     {
       "matchId": "nba_401810834",
@@ -1674,8 +1812,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 134,
+      "awayScore": 123,
+      "totalGoals": 257,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": true
     },
     {
       "matchId": "nba_401810835",
@@ -1691,8 +1835,14 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 109,
+      "awayScore": 103,
+      "totalGoals": 212,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.496Z",
+      "resultMatch": true
     },
     {
       "matchId": "nba_401810836",
@@ -1708,8 +1858,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 110,
+      "awayScore": 107,
+      "totalGoals": 217,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": true
     },
     {
       "matchId": "nba_401810837",
@@ -1725,8 +1881,14 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.089Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.089Z",
+      "homeScore": 116,
+      "awayScore": 111,
+      "totalGoals": 227,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": true
     },
     {
       "matchId": "nhl_401803408",
@@ -1742,8 +1904,14 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 3,
+      "awayScore": 2,
+      "totalGoals": 5,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": true
     },
     {
       "matchId": "nhl_401803409",
@@ -1759,8 +1927,14 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 7,
+      "awayScore": 4,
+      "totalGoals": 11,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": true
     },
     {
       "matchId": "nhl_401803410",
@@ -1776,8 +1950,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 3,
+      "awayScore": 4,
+      "totalGoals": 7,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": false
     },
     {
       "matchId": "nhl_401803411",
@@ -1793,8 +1973,14 @@
       "predictedGoals": null,
       "confidence": "high",
       "riskPercentage": 25,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 2,
+      "awayScore": 4,
+      "totalGoals": 6,
+      "actualResult": "away",
+      "checkedAt": "2026-03-16T08:16:46.497Z",
+      "resultMatch": false
     },
     {
       "matchId": "nhl_401803412",
@@ -1810,8 +1996,14 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 3,
+      "awayScore": 1,
+      "totalGoals": 4,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.498Z",
+      "resultMatch": true
     },
     {
       "matchId": "nhl_401803413",
@@ -1827,10 +2019,16 @@
       "predictedGoals": null,
       "confidence": "medium",
       "riskPercentage": 35,
-      "status": "pending",
-      "createdAt": "2026-03-15T08:01:14.079Z"
+      "status": "completed",
+      "createdAt": "2026-03-15T08:01:14.079Z",
+      "homeScore": 6,
+      "awayScore": 2,
+      "totalGoals": 8,
+      "actualResult": "home",
+      "checkedAt": "2026-03-16T08:16:46.498Z",
+      "resultMatch": true
     }
   ],
-  "lastUpdate": "2026-03-15T08:01:14.214Z",
+  "lastUpdate": "2026-03-16T08:16:46.498Z",
   "version": "2.0"
 }
