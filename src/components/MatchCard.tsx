@@ -4,6 +4,9 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { RiskIndicator } from './RiskIndicator';
+import { DataQualityBadge, DataSourceLabel } from './DataQualityBadge';
+import { DataSourceIndicator, DataQualityComparison, GlobalDataQualityBanner, DataQualityLevel as NewDataQualityLevel } from './DataSourceIndicator';
+import { ErrorAlertBanner, MultiErrorBanner, ErrorType } from './ErrorAlertBanner';
 import { 
   Clock,
   Sparkles,
@@ -13,11 +16,30 @@ import {
   Zap,
   AlertTriangle,
   CheckCircle2,
-  HelpCircle
+  HelpCircle,
+  Info,
+  CircleDot,
+  AlertCircle,
+  Database,
+  TrendingUp,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
+import {
+  DataQualityLevel,
+  DATA_QUALITY_CONFIG,
+  calculateOverallQuality,
+  formatQualityForDisplay,
+  DataQualityMetadata,
+  DataQualityError,
+  ERROR_MESSAGES,
+} from '@/lib/dataQuality';
+
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { useState } from 'react';
 
 // Type pour la qualité des données
-type DataQuality = 'real' | 'estimated' | 'none';
+type DataQuality = 'real' | 'estimated' | 'partial' | 'none';
 
 interface MatchCardProps {
   match: {
@@ -44,10 +66,22 @@ interface MatchCardProps {
     };
     // Qualité des données - TRANSPARENCE
     dataQuality?: {
-      result: DataQuality;
-      goals: DataQuality;
-      cards: DataQuality;
-      corners: DataQuality;
+      overall: DataQuality;
+      overallScore: number;
+      sources: string[];
+      hasRealData: boolean;
+      warnings: string[];
+      errors?: Array<{
+        type: string;
+        message: string;
+        severity: 'critical' | 'warning' | 'info';
+      }>;
+      details: {
+        form: DataQuality;
+        goals: DataQuality;
+        injuries: DataQuality;
+        h2h: DataQuality;
+      };
     };
     // Stats d'équipe (données réelles)
     teamStats?: {
@@ -85,357 +119,534 @@ const dataQualityConfig: Record<DataQuality, {
   label: string; 
   icon: React.ReactNode; 
   color: string;
+  bgColor: string;
+  borderColor: string;
   description: string;
 }> = {
   real: {
     label: 'Données réelles',
-    icon: <CheckCircle2 className="h-3 w-3" />,
-    color: 'bg-green-500/15 text-green-600 border-green-500/30 dark:text-green-400',
-    description: 'Basé sur les stats réelles des équipes'
+    icon: <CheckCircle2 className="h-3.5 w-3.5" />,
+    color: 'text-green-600 dark:text-green-400',
+    bgColor: 'bg-green-500/15',
+    borderColor: 'border-green-500/30',
+    description: 'Basé sur les stats réelles des équipes',
   },
   estimated: {
     label: 'Estimation',
-    icon: <AlertTriangle className="h-3 w-3" />,
-    color: 'bg-yellow-500/15 text-yellow-600 border-yellow-500/30 dark:text-yellow-400',
-    description: 'Basé sur les cotes des bookmakers'
+    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    color: 'text-yellow-600 dark:text-yellow-400',
+    bgColor: 'bg-yellow-500/15',
+    borderColor: 'border-yellow-500/30',
+    description: 'Calculé à partir des cotes des bookmakers',
+  },
+  partial: {
+    label: 'Partiel',
+    icon: <CircleDot className="h-3.5 w-3.5" />,
+    color: 'text-blue-600 dark:text-blue-400',
+    bgColor: 'bg-blue-500/15',
+    borderColor: 'border-blue-500/30',
+    description: 'Certaines données réelles, d\'autres estimées',
   },
   none: {
     label: 'Non disponible',
-    icon: <HelpCircle className="h-3 w-3" />,
-    color: 'bg-gray-500/15 text-gray-600 border-gray-500/30 dark:text-gray-400',
-    description: 'Données non disponibles'
-  }
+    icon: <HelpCircle className="h-3.5 w-3.5" />,
+    color: 'text-gray-600 dark:text-gray-400',
+    bgColor: 'bg-gray-500/15',
+    borderColor: 'border-gray-500/30',
+    description: 'Aucune donnée disponible',
+  },
 };
 
-const sportConfig: Record<string, { icon: string; color: string }> = {
-  Foot: { icon: '⚽', color: 'bg-green-500/10 text-green-600 border-green-500/30 dark:text-green-400 dark:bg-green-500/20' },
-  Basket: { icon: '🏀', color: 'bg-orange-500/10 text-orange-600 border-orange-500/30 dark:text-orange-400 dark:bg-orange-500/20' },
-  NBA: { icon: '🏀', color: 'bg-orange-500/10 text-orange-600 border-orange-500/30 dark:text-orange-400 dark:bg-orange-500/20' },
-  NHL: { icon: '🏒', color: 'bg-blue-500/10 text-blue-600 border-blue-500/30 dark:text-blue-400 dark:bg-blue-500/20' },
-  AHL: { icon: '🏒', color: 'bg-cyan-500/10 text-cyan-600 border-cyan-500/30 dark:text-cyan-400 dark:bg-cyan-500/20' },
-};
+/**
+ * Composant pour afficher un message d'erreur explicite - VERSION AMÉLIORÉE
+ */
+function ErrorMessageBanner({ 
+  error, 
+  compact = false 
+}: { 
+  error: { type: string; message: string; severity: 'critical' | 'warning' | 'info' };
+  compact?: boolean;
+}) {
+  const severityConfig = {
+    critical: {
+      bg: 'bg-red-500/10 border-red-500/30',
+      icon: <AlertCircle className="h-4 w-4 text-red-500" />,
+      text: 'text-red-600 dark:text-red-400',
+    },
+    warning: {
+      bg: 'bg-yellow-500/10 border-yellow-500/30',
+      icon: <AlertTriangle className="h-4 w-4 text-yellow-500" />,
+      text: 'text-yellow-600 dark:text-yellow-400',
+    },
+    info: {
+      bg: 'bg-blue-500/10 border-blue-500/30',
+      icon: <Info className="h-4 w-4 text-blue-500" />,
+      text: 'text-blue-600 dark:text-blue-400',
+    },
+  };
 
-// Fonction pour obtenir le texte de la période NBA
-function getPeriodText(period?: number, sport?: string): string {
-  if (!period || sport !== 'Basket') return '';
+  const config = severityConfig[error.severity];
   
-  if (period <= 4) {
-    return `Q${period}`;
-  } else if (period === 5) {
-    return 'OT';
-  } else {
-    return `${period - 4}OT`;
-  }
-}
+  // Messages d'erreur PLUS EXPLICITES avec cause et solution
+  const errorMessages: Record<string, { 
+    title: string; 
+    cause: string;
+    solution: string;
+    impact: string;
+  }> = {
+    'scraping_blocked': {
+      title: 'Accès aux données bloqué',
+      cause: 'Le site source a détecté une requête automatisée',
+      solution: 'Utilisation des cotes comme source alternative',
+      impact: 'Précision réduite (estimation)',
+    },
+    'api_timeout': {
+      title: 'Délai d\'attente dépassé',
+      cause: 'Le serveur API ne répond pas dans les temps',
+      solution: 'Réessayez dans quelques instants',
+      impact: 'Données de secours utilisées',
+    },
+    'api_error': {
+      title: 'Erreur de l\'API',
+      cause: 'Le service API rencontre un problème technique',
+      solution: 'Données de secours utilisées',
+      impact: 'Prédictions basées sur les cotes',
+    },
+    'rate_limited': {
+      title: 'Limite de requêtes atteinte',
+      cause: 'Trop de requêtes envoyées au serveur',
+      solution: 'Réessayez dans quelques minutes',
+      impact: 'Données temporaires de secours',
+    },
+    'no_data': {
+      title: 'Données non disponibles',
+      cause: 'Aucune donnée trouvée pour ce match',
+      solution: 'Prédiction basée sur les cotes',
+      impact: 'Fiabilité à vérifier',
+    },
+    'cloudflare_blocked': {
+      title: 'Protection Cloudflare active',
+      cause: 'Cloudflare bloque les requêtes automatisées',
+      solution: 'Source alternative utilisée',
+      impact: 'Données estimées uniquement',
+    },
+    'ip_blocked': {
+      title: 'IP bloquée',
+      cause: 'Notre serveur a été bloqué par le site source',
+      solution: 'Configuration d\'une API requise',
+      impact: 'Estimation basée sur les cotes',
+    },
+    'javascript_rendering': {
+      title: 'JavaScript requis',
+      cause: 'Le site nécessite JavaScript pour afficher les données',
+      solution: 'Source alternative utilisée',
+      impact: 'Données partielles',
+    },
+  };
 
-export function MatchCard({ match, onAnalyze, compact = false }: MatchCardProps) {
-  const riskPercentage = match.insight?.riskPercentage || 50;
-  const hasValueBet = match.insight?.valueBetDetected;
-  const matchDate = new Date(match.date);
-  const formattedDate = matchDate.toLocaleDateString('fr-FR', { 
-    day: 'numeric', 
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    timeZone: 'Europe/Paris'
-  });
-
-  const favorite = match.oddsHome < match.oddsAway ? 'home' : 'away';
-  const favoriteTeam = favorite === 'home' ? match.homeTeam : match.awayTeam;
-  const favoriteOdds = favorite === 'home' ? match.oddsHome : match.oddsAway;
-
-  const config = sportConfig[match.sport] || sportConfig.Foot;
-  
-  // Live status
-  const isLive = match.isLive || match.status === 'live';
-  const isFinished = match.status === 'finished' || match.status === 'completed';
-  const periodText = getPeriodText(match.period, match.sport);
+  const errorInfo = errorMessages[error.type] || { 
+    title: error.message, 
+    cause: 'Cause inconnue',
+    solution: 'Réessayez ultérieurement',
+    impact: 'Impact variable',
+  };
 
   if (compact) {
     return (
-      <Card className={`group hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-500/5 transition-all cursor-pointer bg-card min-w-0 ${isLive ? 'border-red-500/50 bg-red-500/5' : ''}`}>
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <span className="text-xl shrink-0">{config.icon}</span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-base">
-                  <span className="inline">{match.homeTeam}</span>
-                  <span className="inline mx-1">vs</span>
-                  <span className="inline">{match.awayTeam}</span>
-                </p>
-                <div className="flex items-center gap-2">
-                  {isLive ? (
-                    <div className="flex items-center gap-1.5 text-red-500 font-medium text-sm">
-                      <Radio className="h-3 w-3 animate-pulse" />
-                      <span>LIVE</span>
-                      {match.homeScore !== undefined && (
-                        <span className="ml-1">{match.homeScore} - {match.awayScore}</span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      @{favoriteOdds.toFixed(2)} • {formattedDate}
-                    </p>
-                  )}
-                </div>
-              </div>
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${config.bg} border cursor-help`}>
+              {config.icon}
+              <span className={`text-xs ${config.text}`}>{errorInfo.title}</span>
             </div>
-            <div className="shrink-0">
-              <RiskIndicator percentage={riskPercentage} showLabel={false} size="sm" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs">
+            <div className="space-y-1.5 text-xs">
+              <p className="font-semibold">{errorInfo.title}</p>
+              <p className="text-muted-foreground">Cause: {errorInfo.cause}</p>
+              <p className="text-green-600">✓ {errorInfo.solution}</p>
+              <p className="text-yellow-600">⚠ {errorInfo.impact}</p>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     );
   }
 
   return (
-    <Card className={`group hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-500/5 transition-all bg-card border-border/50 ${isLive ? 'border-red-500/50 bg-gradient-to-br from-red-500/5 to-transparent' : ''}`}>
-      <CardHeader className="pb-2">
+    <div className={`flex items-start gap-2.5 p-3 rounded-lg border ${config.bg}`}>
+      {config.icon}
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className={`text-sm font-semibold ${config.text}`}>{errorInfo.title}</p>
+        <p className="text-xs text-muted-foreground">Cause: {errorInfo.cause}</p>
+        <div className="flex flex-wrap gap-2 mt-2">
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20">
+            ✓ {errorInfo.solution}
+          </span>
+          <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-500/10 text-yellow-600 border border-yellow-500/20">
+            ⚠ {errorInfo.impact}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Composant pour afficher l'indicateur de qualité principal - VERSION AMÉLIORÉE
+ * avec distinction claire entre Estimation et Données réelles
+ */
+function DataQualityHeader({ dataQuality }: { dataQuality?: MatchCardProps['match']['dataQuality'] }) {
+  const [showDetails, setShowDetails] = useState(false);
+  
+  if (!dataQuality) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/30">
+          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+          <div className="flex-1">
+            <span className="text-sm font-semibold text-yellow-600 dark:text-yellow-400">ESTIMATION</span>
+            <p className="text-xs text-muted-foreground">Basé sur les cotes des bookmakers</p>
+          </div>
+        </div>
+        <div className="text-xs text-muted-foreground p-2 bg-muted/30 rounded">
+          <strong>Note:</strong> Aucune donnée réelle disponible. Les prédictions sont estimées.
+        </div>
+      </div>
+    );
+  }
+
+  const config = dataQualityConfig[dataQuality.overall];
+  const isEstimated = dataQuality.overall === 'estimated';
+  const isReal = dataQuality.overall === 'real';
+  
+  return (
+    <div className="space-y-3">
+      {/* Badge principal avec indicateur RÉEL/ESTIMATION très visible */}
+      <div className={`p-3 rounded-lg border-2 ${
+        isReal 
+          ? 'border-green-500/50 bg-green-500/10' 
+          : isEstimated 
+            ? 'border-yellow-500/50 bg-yellow-500/10'
+            : 'border-border bg-muted/30'
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className={config.color}>
-              <span className="mr-1">{config.icon}</span>
-              {match.league || match.sport}
-            </Badge>
+            <div className={`p-1.5 rounded ${
+              isReal ? 'bg-green-500' : isEstimated ? 'bg-yellow-500' : 'bg-muted'
+            }`}>
+              {config.icon}
+            </div>
+            <div>
+              <span className={`text-sm font-bold ${config.color}`}>
+                {isReal ? 'DONNÉES RÉELLES' : isEstimated ? 'ESTIMATION' : config.label.toUpperCase()}
+              </span>
+              <p className="text-xs text-muted-foreground">{config.description}</p>
+            </div>
+          </div>
+          {dataQuality.overallScore > 0 && (
+            <div className="text-right">
+              <span className={`text-lg font-bold ${config.color}`}>{dataQuality.overallScore}%</span>
+              <p className="text-[10px] text-muted-foreground">confiance</p>
+            </div>
+          )}
+        </div>
+
+        {/* Barre de progression du score */}
+        <div className="mt-2">
+          <div className="w-full bg-muted rounded-full h-2">
+            <div 
+              className={`h-full rounded-full transition-all ${
+                dataQuality.overallScore >= 80 ? 'bg-green-500' :
+                dataQuality.overallScore >= 50 ? 'bg-blue-500' :
+                dataQuality.overallScore >= 20 ? 'bg-yellow-500' : 'bg-gray-500'
+              }`}
+              style={{ width: `${dataQuality.overallScore}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Sources de données */}
+      {dataQuality.sources.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Database className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">Sources:</span>
+          {dataQuality.sources.slice(0, 3).map((source, idx) => (
+            <DataSourceLabel key={idx} source={source} />
+          ))}
+          {dataQuality.sources.length > 3 && (
+            <span className="text-xs text-muted-foreground">
+              +{dataQuality.sources.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Toggle détails */}
+      <button
+        onClick={() => setShowDetails(!showDetails)}
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground w-full justify-center py-1"
+      >
+        {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        {showDetails ? 'Masquer les détails' : 'Voir les détails par catégorie'}
+      </button>
+
+      {/* Détails par catégorie */}
+      {showDetails && (
+        <div className="grid grid-cols-4 gap-1.5 p-2 rounded-lg bg-muted/20">
+          {Object.entries(dataQuality.details).map(([key, quality]) => {
+            const labels: Record<string, string> = {
+              form: 'Forme',
+              goals: 'Buts',
+              injuries: 'Blessures',
+              h2h: 'H2H',
+            };
+            const qConfig = dataQualityConfig[quality];
+            return (
+              <TooltipProvider key={key}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className={`flex flex-col items-center gap-0.5 px-1.5 py-1.5 rounded text-[10px] ${qConfig.bgColor} ${qConfig.color} border ${qConfig.borderColor} cursor-help`}>
+                      {quality === 'real' ? <CheckCircle2 className="h-3 w-3" /> :
+                       quality === 'estimated' ? <AlertTriangle className="h-3 w-3" /> :
+                       quality === 'partial' ? <CircleDot className="h-3 w-3" /> :
+                       <HelpCircle className="h-3 w-3" />}
+                      <span className="font-medium">{labels[key]}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <div className="text-xs space-y-1">
+                      <p className="font-semibold">{labels[key]}: {qConfig.label}</p>
+                      <p className="text-muted-foreground">{qConfig.description}</p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Erreurs explicites */}
+      {dataQuality.errors && dataQuality.errors.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <AlertCircle className="h-3.5 w-3.5" />
+            <span>{dataQuality.errors.length} problème{dataQuality.errors.length > 1 ? 's' : ''} détecté{dataQuality.errors.length > 1 ? 's' : ''}</span>
+          </div>
+          {dataQuality.errors.slice(0, 3).map((error, idx) => (
+            <ErrorMessageBanner key={idx} error={error} compact />
+          ))}
+          {dataQuality.errors.length > 3 && (
+            <span className="text-xs text-muted-foreground pl-2">
+              +{dataQuality.errors.length - 3} autre(s) avertissement(s)
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Message explicatif si estimation */}
+      {isEstimated && (
+        <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20 text-xs">
+          <strong>💡 Pourquoi des estimations?</strong>
+          <p className="text-muted-foreground mt-1">
+            Les sources de données réelles sont temporairement indisponibles. 
+            Les cotes des bookmakers sont utilisées pour calculer les probabilités.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * MatchCard - Carte de match avec prédictions et indicateurs de qualité
+ */
+export function MatchCard({ match, onAnalyze, compact = false }: MatchCardProps) {
+  const isLive = match.isLive || match.status === 'live';
+  const config = match.dataQuality ? dataQualityConfig[match.dataQuality.overall] : null;
+
+  return (
+    <Card className={`transition-all hover:shadow-lg ${compact ? 'p-2' : ''}`}>
+      <CardHeader className={`pb-2 ${compact ? 'p-3' : ''}`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {match.league && (
+              <Badge variant="outline" className="text-xs">
+                {match.league}
+              </Badge>
+            )}
             {isLive && (
-              <Badge className="bg-red-500 text-white border-0 animate-pulse">
+              <Badge className="bg-red-500 text-white animate-pulse">
                 <Radio className="h-3 w-3 mr-1" />
                 LIVE
               </Badge>
             )}
-            {isFinished && (
-              <Badge variant="outline" className="bg-muted text-muted-foreground">
-                Terminé
-              </Badge>
+          </div>
+          
+          {/* Indicateur de qualité principal */}
+          {match.dataQuality && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className={`${config?.bgColor} ${config?.color} ${config?.borderColor}`}
+                  >
+                    {config?.icon}
+                    <span className="ml-1 text-xs">{config?.label}</span>
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="text-xs">{config?.description}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+
+        {/* Équipes et score */}
+        <div className="flex items-center justify-between mt-2">
+          <div className="flex-1">
+            <p className="font-semibold">{match.homeTeam}</p>
+            {match.teamStats?.home?.dataAvailable && (
+              <p className="text-xs text-muted-foreground">
+                Form: {match.teamStats.home.form}
+              </p>
             )}
           </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
-            <Clock className="h-3 w-3" />
-            {isLive && periodText ? (
-              <span className="font-medium text-red-500">{periodText} {match.clock}</span>
-            ) : (
-              formattedDate
+          
+          {isLive && match.homeScore !== undefined && match.awayScore !== undefined && (
+            <div className="px-4 py-2 bg-muted rounded-lg">
+              <span className="text-2xl font-bold">
+                {match.homeScore} - {match.awayScore}
+              </span>
+              {match.clock && (
+                <p className="text-xs text-center text-muted-foreground">
+                  <Clock className="h-3 w-3 inline mr-1" />
+                  {match.clock}
+                </p>
+              )}
+            </div>
+          )}
+          
+          <div className="flex-1 text-right">
+            <p className="font-semibold">{match.awayTeam}</p>
+            {match.teamStats?.away?.dataAvailable && (
+              <p className="text-xs text-muted-foreground">
+                Form: {match.teamStats.away.form}
+              </p>
             )}
+          </div>
+        </div>
+
+        {/* Cotes */}
+        <div className="flex items-center justify-center gap-4 mt-2">
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">1</p>
+            <p className="font-bold">{match.oddsHome.toFixed(2)}</p>
+          </div>
+          {match.oddsDraw && (
+            <div className="text-center">
+              <p className="text-xs text-muted-foreground">X</p>
+              <p className="font-bold">{match.oddsDraw.toFixed(2)}</p>
+            </div>
+          )}
+          <div className="text-center">
+            <p className="text-xs text-muted-foreground">2</p>
+            <p className="font-bold">{match.oddsAway.toFixed(2)}</p>
           </div>
         </div>
       </CardHeader>
-      
-      <CardContent className="space-y-4 p-5">
-        {/* Teams */}
-        <div className="space-y-3">
-          {/* Home Team */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1">
-              <span className={`font-bold text-base ${favorite === 'home' ? 'text-orange-500' : 'text-foreground'}`}>
-                {match.homeTeam}
-              </span>
-              {favorite === 'home' && (
-                <Badge className="text-[10px] px-2 py-0 h-5 bg-orange-500 text-white border-0 shrink-0 font-medium">
-                  <Star className="h-3 w-3 mr-0.5" />
-                  FAV
-                </Badge>
-              )}
-              {/* Form indicator for home team */}
-              {match.teamStats?.home?.dataAvailable && match.teamStats.home.form && (
-                <div className="flex items-center gap-0.5 shrink-0" title={`Forme: ${match.teamStats.home.form}`}>
-                  {match.teamStats.home.form.split('').map((result, i) => (
-                    <span 
-                      key={i} 
-                      className={`w-2 h-2 rounded-sm text-[8px] flex items-center justify-center font-bold ${
-                        result === 'W' ? 'bg-green-500' : 
-                        result === 'D' ? 'bg-yellow-500' : 
-                        result === 'L' ? 'bg-red-500' : 'bg-gray-400'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
+
+      <CardContent className={compact ? 'p-3 pt-0' : ''}>
+        {/* Section Qualité des données */}
+        {!compact && (
+          <div className="mb-4 p-3 rounded-lg bg-muted/30 border border-border/50">
+            <div className="flex items-center gap-2 mb-2">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Source des données</span>
             </div>
-            {/* Score or Odds */}
-            {isLive && match.homeScore !== undefined ? (
-              <span className="font-mono font-bold text-xl text-red-500 shrink-0">
-                {match.homeScore}
-              </span>
-            ) : (
-              <span className={`font-mono font-bold text-lg shrink-0 ${favorite === 'home' ? 'text-orange-500' : 'text-foreground'}`}>
-                {match.oddsHome.toFixed(2)}
-              </span>
-            )}
+            <DataQualityHeader dataQuality={match.dataQuality} />
           </div>
-          
-          {/* Draw or Score */}
-          {isLive && match.homeScore !== undefined ? (
-            <div className="flex items-center justify-center py-1">
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span className="font-mono font-bold text-lg">{match.homeScore}</span>
-                <span className="text-lg">-</span>
-                <span className="font-mono font-bold text-lg">{match.awayScore}</span>
+        )}
+
+        {/* Prédiction de buts */}
+        {match.goalsPrediction && (
+          <div className="mt-3">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Prédiction buts</span>
+              <DataQualityBadge 
+                quality={match.goalsPrediction.basedOn} 
+                size="sm" 
+                showLabel={false}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-sm">
+              <div className="p-2 rounded bg-muted/50">
+                <span className="text-muted-foreground">Total attendu:</span>
+                <span className="font-bold ml-1">{match.goalsPrediction.total.toFixed(1)}</span>
               </div>
-            </div>
-          ) : match.oddsDraw ? (
-            <div className="flex items-center justify-between text-sm text-muted-foreground py-2 border-y border-dashed border-border/50 gap-3">
-              <span className="font-medium">Nul</span>
-              <span className="font-mono font-semibold shrink-0">{match.oddsDraw.toFixed(2)}</span>
-            </div>
-          ) : null}
-          
-          {/* Away Team */}
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1">
-              <span className={`font-bold text-base ${favorite === 'away' ? 'text-orange-500' : 'text-foreground'}`}>
-                {match.awayTeam}
-              </span>
-              {favorite === 'away' && (
-                <Badge className="text-[10px] px-2 py-0 h-5 bg-orange-500 text-white border-0 shrink-0 font-medium">
-                  <Star className="h-3 w-3 mr-0.5" />
-                  FAV
-                </Badge>
-              )}
-              {/* Form indicator for away team */}
-              {match.teamStats?.away?.dataAvailable && match.teamStats.away.form && (
-                <div className="flex items-center gap-0.5 shrink-0" title={`Forme: ${match.teamStats.away.form}`}>
-                  {match.teamStats.away.form.split('').map((result, i) => (
-                    <span 
-                      key={i} 
-                      className={`w-2 h-2 rounded-sm text-[8px] flex items-center justify-center font-bold ${
-                        result === 'W' ? 'bg-green-500' : 
-                        result === 'D' ? 'bg-yellow-500' : 
-                        result === 'L' ? 'bg-red-500' : 'bg-gray-400'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-            {/* Score or Odds */}
-            {isLive && match.awayScore !== undefined ? (
-              <span className="font-mono font-bold text-xl text-red-500 shrink-0">
-                {match.awayScore}
-              </span>
-            ) : (
-              <span className={`font-mono font-bold text-lg shrink-0 ${favorite === 'away' ? 'text-orange-500' : 'text-foreground'}`}>
-                {match.oddsAway.toFixed(2)}
-              </span>
-            )}
-          </div>
-        </div>
-        
-        {/* Stats d'équipe et prédictions (si disponibles) */}
-        {match.teamStats?.home?.dataAvailable && match.teamStats?.away?.dataAvailable && (
-          <div className="mt-3 pt-3 border-t border-border/50">
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              {/* Home team stats */}
-              <div className="text-center space-y-1">
-                <p className="text-muted-foreground font-medium">{match.homeTeam.split(' ')[0]}</p>
-                <div className="flex justify-center gap-2 text-[10px]">
-                  <span className="text-green-500" title="Buts marqués/match">
-                    ⬆️ {match.teamStats.home.avgGoalsScored.toFixed(1)}
-                  </span>
-                  <span className="text-red-500" title="Buts encaissés/match">
-                    ⬇️ {match.teamStats.home.avgGoalsConceded.toFixed(1)}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {match.teamStats.home.winRate.toFixed(0)}% victoires
-                </p>
-              </div>
-              
-              {/* Prediction */}
-              {match.goalsPrediction && (
-                <div className="text-center space-y-1 bg-orange-500/10 rounded-lg py-1.5 px-2">
-                  <p className="font-semibold text-orange-600 dark:text-orange-400 text-xs">
-                    {match.goalsPrediction.prediction}
-                  </p>
-                  <div className="flex justify-center gap-2 text-[10px] text-muted-foreground">
-                    <span title="Over 2.5">O2.5: {match.goalsPrediction.over25}%</span>
-                    <span title="Les deux marquent">BTTS: {match.goalsPrediction.bothTeamsScore}%</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Away team stats */}
-              <div className="text-center space-y-1">
-                <p className="text-muted-foreground font-medium">{match.awayTeam.split(' ')[0]}</p>
-                <div className="flex justify-center gap-2 text-[10px]">
-                  <span className="text-green-500" title="Buts marqués/match">
-                    ⬆️ {match.teamStats.away.avgGoalsScored.toFixed(1)}
-                  </span>
-                  <span className="text-red-500" title="Buts encaissés/match">
-                    ⬇️ {match.teamStats.away.avgGoalsConceded.toFixed(1)}
-                  </span>
-                </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {match.teamStats.away.winRate.toFixed(0)}% victoires
-                </p>
+              <div className="p-2 rounded bg-muted/50">
+                <span className="text-muted-foreground">+2.5 buts:</span>
+                <span className="font-bold ml-1">{match.goalsPrediction.over25}%</span>
               </div>
             </div>
           </div>
         )}
 
-        {/* Risk and Value Bet indicators */}
-        <div className="flex items-center justify-between pt-3 border-t border-border/50 gap-2">
-          <div className="flex items-center gap-2 flex-wrap min-w-0">
-            <div className="shrink-0">
-              <RiskIndicator percentage={riskPercentage} size="sm" />
+        {/* Insight */}
+        {match.insight && (
+          <div className="mt-3">
+            <RiskIndicator 
+              percentage={match.insight.riskPercentage}
+              showLabel={true}
+            />
+            {match.insight.valueBetDetected && (
+              <div className="mt-2 p-2 rounded-lg bg-green-500/10 border border-green-500/20">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-green-500" />
+                  <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                    Value Bet détecté: {match.insight.valueBetType}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Avertissements */}
+        {match.dataQuality?.warnings && match.dataQuality.warnings.length > 0 && (
+          <div className="mt-3 p-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="h-4 w-4 text-yellow-500 shrink-0 mt-0.5" />
+              <div className="text-xs space-y-1">
+                {match.dataQuality.warnings.map((warning, idx) => (
+                  <p key={idx} className="text-yellow-600 dark:text-yellow-400">{warning}</p>
+                ))}
+              </div>
             </div>
-            {hasValueBet && (
-              <Badge className="bg-green-500/15 text-green-600 border-green-500/30 dark:text-green-400 dark:bg-green-500/20 text-xs shrink-0 font-medium">
-                <Sparkles className="h-3 w-3 mr-1" />
-                Value Bet
-              </Badge>
-            )}
-            {isLive && (
-              <Badge className="bg-red-500/15 text-red-600 border-red-500/30 dark:text-red-400 text-xs shrink-0 font-medium">
-                <Zap className="h-3 w-3 mr-1" />
-                En direct
-              </Badge>
-            )}
-            {/* Badge de qualité des données - TRANSPARENCE */}
-            {match.dataQuality && match.dataQuality.result !== 'real' && (
-              <Badge 
-                className={`${dataQualityConfig[match.dataQuality.result].color} text-xs shrink-0 font-medium`}
-                title={dataQualityConfig[match.dataQuality.result].description}
-              >
-                {dataQualityConfig[match.dataQuality.result].icon}
-                <span className="ml-1">{dataQualityConfig[match.dataQuality.result].label}</span>
-              </Badge>
-            )}
-            {match.dataQuality?.result === 'real' && (
-              <Badge 
-                className={`${dataQualityConfig.real.color} text-xs shrink-0 font-medium`}
-                title={dataQualityConfig.real.description}
-              >
-                {dataQualityConfig.real.icon}
-                <span className="ml-1">{dataQualityConfig.real.label}</span>
-              </Badge>
-            )}
           </div>
-          
-          {onAnalyze && !isLive && !isFinished && (
-            <Button 
-              size="sm" 
-              variant="default"
-              onClick={() => onAnalyze(match.id)}
-              className="h-8 px-3 bg-orange-500 hover:bg-orange-600 text-white shrink-0 font-medium"
-            >
-              Analyser
-              <ChevronRight className="h-4 w-4 ml-1" />
-            </Button>
-          )}
-        </div>
-        
-        {/* Avertissement de transparence */}
-        {match.dataQuality && match.dataQuality.result === 'estimated' && !isLive && !isFinished && (
-          <div className="mt-2 pt-2 border-t border-border/30">
-            <p className="text-[10px] text-muted-foreground italic flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              Prédictions basées sur les cotes des bookmakers (pas de stats équipe disponibles)
-            </p>
-          </div>
+        )}
+
+        {/* Bouton d'analyse */}
+        {onAnalyze && (
+          <Button 
+            onClick={() => onAnalyze(match.id)}
+            className="w-full mt-4"
+            variant="outline"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Analyser ce match
+            <ChevronRight className="h-4 w-4 ml-2" />
+          </Button>
         )}
       </CardContent>
     </Card>
   );
 }
+
+export default MatchCard;

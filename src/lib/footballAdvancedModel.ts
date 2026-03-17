@@ -178,15 +178,22 @@ async function getFBrefData(homeTeam: string, awayTeam: string): Promise<{
   
   try {
     // Exécuter en parallèle pour gagner du temps
-    const [homeForm, awayForm, homeXG, awayXG, h2h] = await Promise.all([
-      scrapeFormGuide(homeTeam).catch(() => null),
-      scrapeFormGuide(awayTeam).catch(() => null),
-      scrapeTeamXG(homeTeam).catch(() => null),
-      scrapeTeamXG(awayTeam).catch(() => null),
-      scrapeH2HHistory(homeTeam, awayTeam).catch(() => null),
+    const [homeFormResult, awayFormResult, homeXGResult, awayXGResult, h2hResult] = await Promise.all([
+      scrapeFormGuide(homeTeam).catch(() => ({ data: null, error: null, dataSource: 'none' as const })),
+      scrapeFormGuide(awayTeam).catch(() => ({ data: null, error: null, dataSource: 'none' as const })),
+      scrapeTeamXG(homeTeam).catch(() => ({ data: null, error: null, dataSource: 'none' as const })),
+      scrapeTeamXG(awayTeam).catch(() => ({ data: null, error: null, dataSource: 'none' as const })),
+      scrapeH2HHistory(homeTeam, awayTeam).catch(() => ({ data: null, error: null, dataSource: 'none' as const })),
     ]);
     
-    return { homeForm, awayForm, homeXG, awayXG, h2h };
+    // Extraire les données des résultats
+    return { 
+      homeForm: homeFormResult.data, 
+      awayForm: awayFormResult.data, 
+      homeXG: homeXGResult.data, 
+      awayXG: awayXGResult.data, 
+      h2h: h2hResult.data 
+    };
   } catch (error) {
     console.error('Erreur FBref:', error);
     return { homeForm: null, awayForm: null, homeXG: null, awayXG: null, h2h: null };

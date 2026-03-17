@@ -10,9 +10,17 @@
  * - Buts et xG (Expected Goals)
  * 
  * IMPORTANT: Attendre 3-5 secondes entre chaque requête pour éviter le blocage IP
+ * 
+ * AMÉLIORÉ: Messages d'erreur explicites et indicateur de qualité
  */
 
 import ZAI from 'z-ai-web-dev-sdk';
+import { 
+  ScraperError, 
+  createScraperError, 
+  detectErrorType,
+  formatErrorForLog 
+} from './scraperErrorHandler';
 
 // Types
 export interface MatchResult {
@@ -88,6 +96,33 @@ export interface TeamXGStats {
   xGDPer90: number;
   // Performance
   overperforming: number; // Goals - xG (positif = chanceux)
+}
+
+// Interface pour les résultats avec erreurs
+export interface ScraperResult<T> {
+  data: T | null;
+  error: ScraperError | null;
+  dataSource: 'real' | 'estimated' | 'none';
+}
+
+// Interface pour les stats avancées d'un match
+export interface AdvancedMatchStatsResult {
+  homeForm: FormGuide | null;
+  awayForm: FormGuide | null;
+  h2h: H2HHistory | null;
+  homeXG: TeamXGStats | null;
+  awayXG: TeamXGStats | null;
+  homeDiscipline: DisciplineStats | null;
+  awayDiscipline: DisciplineStats | null;
+  analysis: {
+    formAdvantage: 'home' | 'away' | 'neutral';
+    xGAdvantage: 'home' | 'away' | 'neutral';
+    disciplineRisk: 'low' | 'medium' | 'high';
+    h2hTrend: string;
+    recommendation: string;
+  };
+  errors: ScraperError[];
+  dataQuality: 'real' | 'estimated' | 'partial' | 'none';
 }
 
 // Cache
@@ -245,14 +280,16 @@ async function findTeamPage(teamName: string): Promise<string | null> {
 
 /**
  * Scrape le Form Guide d'une équipe
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
-export async function scrapeFormGuide(teamName: string): Promise<FormGuide | null> {
+export async function scrapeFormGuide(teamName: string): Promise<ScraperResult<FormGuide>> {
   console.log(`📊 Scraping Form Guide: ${teamName} (FBref)...`);
   
   const cacheKey = `form_${teamName}`;
   const cached = cache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-    return cached.data;
+    return { data: cached.data, error: null, dataSource: 'real' };
   }
   
   try {
@@ -263,7 +300,16 @@ export async function scrapeFormGuide(teamName: string): Promise<FormGuide | nul
     
     if (!teamUrl) {
       console.log(`⚠️ Équipe non trouvée sur FBref: ${teamName}`);
-      return null;
+      return {
+        data: null,
+        error: createScraperError(
+          'not_found',
+          'FBref',
+          ['form'],
+          `Équipe "${teamName}" non trouvée sur FBref`
+        ),
+        dataSource: 'none',
+      };
     }
     
     await delay();
@@ -272,11 +318,43 @@ export async function scrapeFormGuide(teamName: string): Promise<FormGuide | nul
       url: teamUrl
     });
     
-    if (result.code !== 200 || !result.data?.html) {
-      return null;
+    // Détection des erreurs
+    if (result.code !== 200) {
+      const errorType = detectErrorType(result, 'FBref');
+      const error = createScraperError(
+        errorType,
+        'FBref',
+        ['form'],
+        `Erreur HTTP ${result.code} lors de l'accès à la page de l'équipe`
+      );
+      console.warn(`⚠️ ${formatErrorForLog(error)}`);
+      return { data: null, error, dataSource: 'none' };
+    }
+    
+    if (!result.data?.html) {
+      const error = createScraperError(
+        'invalid_response',
+        'FBref',
+        ['form'],
+        'Pas de données HTML reçues'
+      );
+      return { data: null, error, dataSource: 'none' };
     }
     
     const html = result.data.html;
+    
+    // Vérifier Cloudflare
+    if (html.includes('cloudflare') || html.includes('challenge-platform') || html.length < 3000) {
+      const error = createScraperError(
+        'cloudflare_blocked',
+        'FBref',
+        ['form', 'xg', 'h2h'],
+        'Cloudflare a bloqué l\'accès - protection anti-bot active'
+      );
+      console.warn(`⚠️ ${formatErrorForLog(error)}`);
+      return { data: null, error, dataSource: 'none' };
+    }
+    
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     
     // Parser les résultats récents
@@ -337,24 +415,32 @@ export async function scrapeFormGuide(teamName: string): Promise<FormGuide | nul
     cache.set(cacheKey, { data: formGuide, timestamp: Date.now() });
     console.log(`✅ Form Guide: ${teamName} - Form: ${form} (${formPoints}/15 pts)`);
     
-    return formGuide;
+    return { data: formGuide, error: null, dataSource: 'real' };
     
-  } catch (error) {
-    console.error('Erreur scraping Form Guide:', error);
-    return null;
+  } catch (error: any) {
+    const scraperError = createScraperError(
+      'unknown',
+      'FBref',
+      ['form'],
+      error.message
+    );
+    console.error('Erreur scraping Form Guide:', error.message);
+    return { data: null, error: scraperError, dataSource: 'none' };
   }
 }
 
 /**
  * Scrape les stats de discipline d'une équipe
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
-export async function scrapeDisciplineStats(teamName: string): Promise<DisciplineStats | null> {
+export async function scrapeDisciplineStats(teamName: string): Promise<ScraperResult<DisciplineStats>> {
   console.log(`🟨 Scraping Discipline: ${teamName} (FBref)...`);
   
   const cacheKey = `discipline_${teamName}`;
   const cached = cache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-    return cached.data;
+    return { data: cached.data, error: null, dataSource: 'real' };
   }
   
   try {
@@ -363,7 +449,18 @@ export async function scrapeDisciplineStats(teamName: string): Promise<Disciplin
     const zai = await ZAI.create();
     const teamUrl = await findTeamPage(teamName);
     
-    if (!teamUrl) return null;
+    if (!teamUrl) {
+      return {
+        data: null,
+        error: createScraperError(
+          'not_found',
+          'FBref',
+          ['discipline'],
+          `Équipe "${teamName}" non trouvée`
+        ),
+        dataSource: 'none',
+      };
+    }
     
     // Aller sur la page des stats de l'équipe
     const statsUrl = teamUrl.replace('/squads/', '/squads/') + '#team_stats';
@@ -374,14 +471,38 @@ export async function scrapeDisciplineStats(teamName: string): Promise<Disciplin
       url: statsUrl
     });
     
-    if (result.code !== 200 || !result.data?.html) {
-      return null;
+    // Détection des erreurs
+    if (result.code !== 200) {
+      const errorType = detectErrorType(result, 'FBref');
+      return {
+        data: null,
+        error: createScraperError(errorType, 'FBref', ['discipline'], `Erreur HTTP ${result.code}`),
+        dataSource: 'none',
+      };
     }
     
-    const text = result.data.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    if (!result.data?.html) {
+      return {
+        data: null,
+        error: createScraperError('invalid_response', 'FBref', ['discipline'], 'Pas de données reçues'),
+        dataSource: 'none',
+      };
+    }
+    
+    const html = result.data.html;
+    
+    // Vérifier Cloudflare
+    if (html.includes('cloudflare') || html.includes('challenge-platform') || html.length < 3000) {
+      return {
+        data: null,
+        error: createScraperError('cloudflare_blocked', 'FBref', ['discipline'], 'Accès bloqué par Cloudflare'),
+        dataSource: 'none',
+      };
+    }
+    
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     
     // Parser les cartons
-    // Pattern: "CrdY" (Yellow Cards) et "CrdR" (Red Cards)
     const yellowMatch = text.match(/(\d+)\s*(?:CrdY|Yellow|Jaune)/i);
     const redMatch = text.match(/(\d+)\s*(?:CrdR|Red|Rouge)/i);
     const foulsMatch = text.match(/(\d+)\s*(?:Fls|Fouls|Fautes)/i);
@@ -404,27 +525,32 @@ export async function scrapeDisciplineStats(teamName: string): Promise<Disciplin
     cache.set(cacheKey, { data: discipline, timestamp: Date.now() });
     console.log(`✅ Discipline: ${teamName} - ${yellowCards}🟨 ${redCards}🟥`);
     
-    return discipline;
+    return { data: discipline, error: null, dataSource: 'real' };
     
-  } catch (error) {
-    console.error('Erreur scraping Discipline:', error);
-    return null;
+  } catch (error: any) {
+    return {
+      data: null,
+      error: createScraperError('unknown', 'FBref', ['discipline'], error.message),
+      dataSource: 'none',
+    };
   }
 }
 
 /**
  * Scrape l'historique H2H entre deux équipes
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
 export async function scrapeH2HHistory(
   team1: string,
   team2: string
-): Promise<H2HHistory | null> {
+): Promise<ScraperResult<H2HHistory>> {
   console.log(`⚔️ Scraping H2H: ${team1} vs ${team2} (FBref)...`);
   
   const cacheKey = `h2h_${team1}_${team2}`;
   const cached = cache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-    return cached.data;
+    return { data: cached.data, error: null, dataSource: 'real' };
   }
   
   try {
@@ -439,11 +565,35 @@ export async function scrapeH2HHistory(
       url: h2hUrl
     });
     
-    if (result.code !== 200 || !result.data?.html) {
-      return null;
+    // Détection des erreurs
+    if (result.code !== 200) {
+      const errorType = detectErrorType(result, 'FBref');
+      return {
+        data: null,
+        error: createScraperError(errorType, 'FBref', ['h2h'], `Erreur HTTP ${result.code}`),
+        dataSource: 'none',
+      };
+    }
+    
+    if (!result.data?.html) {
+      return {
+        data: null,
+        error: createScraperError('invalid_response', 'FBref', ['h2h'], 'Pas de données reçues'),
+        dataSource: 'none',
+      };
     }
     
     const html = result.data.html;
+    
+    // Vérifier Cloudflare
+    if (html.includes('cloudflare') || html.includes('challenge-platform') || html.length < 3000) {
+      return {
+        data: null,
+        error: createScraperError('cloudflare_blocked', 'FBref', ['h2h'], 'Accès bloqué par Cloudflare'),
+        dataSource: 'none',
+      };
+    }
+    
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     
     // Parser les matchs H2H
@@ -513,24 +663,29 @@ export async function scrapeH2HHistory(
     cache.set(cacheKey, { data: h2h, timestamp: Date.now() });
     console.log(`✅ H2H: ${team1} ${team1Wins}W - ${draws}D - ${team2Wins}W ${team2}`);
     
-    return h2h;
+    return { data: h2h, error: null, dataSource: 'real' };
     
-  } catch (error) {
-    console.error('Erreur scraping H2H:', error);
-    return null;
+  } catch (error: any) {
+    return {
+      data: null,
+      error: createScraperError('unknown', 'FBref', ['h2h'], error.message),
+      dataSource: 'none',
+    };
   }
 }
 
 /**
  * Scrape les xG d'une équipe
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
-export async function scrapeTeamXG(teamName: string): Promise<TeamXGStats | null> {
+export async function scrapeTeamXG(teamName: string): Promise<ScraperResult<TeamXGStats>> {
   console.log(`📈 Scraping xG: ${teamName} (FBref)...`);
   
   const cacheKey = `xg_${teamName}`;
   const cached = cache.get(cacheKey);
   if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
-    return cached.data;
+    return { data: cached.data, error: null, dataSource: 'real' };
   }
   
   try {
@@ -539,7 +694,13 @@ export async function scrapeTeamXG(teamName: string): Promise<TeamXGStats | null
     const zai = await ZAI.create();
     const teamUrl = await findTeamPage(teamName);
     
-    if (!teamUrl) return null;
+    if (!teamUrl) {
+      return {
+        data: null,
+        error: createScraperError('not_found', 'FBref', ['xg'], `Équipe "${teamName}" non trouvée`),
+        dataSource: 'none',
+      };
+    }
     
     await delay();
     
@@ -547,14 +708,38 @@ export async function scrapeTeamXG(teamName: string): Promise<TeamXGStats | null
       url: teamUrl
     });
     
-    if (result.code !== 200 || !result.data?.html) {
-      return null;
+    // Détection des erreurs
+    if (result.code !== 200) {
+      const errorType = detectErrorType(result, 'FBref');
+      return {
+        data: null,
+        error: createScraperError(errorType, 'FBref', ['xg'], `Erreur HTTP ${result.code}`),
+        dataSource: 'none',
+      };
     }
     
-    const text = result.data.html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+    if (!result.data?.html) {
+      return {
+        data: null,
+        error: createScraperError('invalid_response', 'FBref', ['xg'], 'Pas de données reçues'),
+        dataSource: 'none',
+      };
+    }
+    
+    const html = result.data.html;
+    
+    // Vérifier Cloudflare
+    if (html.includes('cloudflare') || html.includes('challenge-platform') || html.length < 3000) {
+      return {
+        data: null,
+        error: createScraperError('cloudflare_blocked', 'FBref', ['xg'], 'Accès bloqué par Cloudflare'),
+        dataSource: 'none',
+      };
+    }
+    
+    const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     
     // Parser les xG
-    // Pattern: xG: 45.2, xGA: 38.1
     const xgMatch = text.match(/xG:\s*([\d.]+)/i);
     const xgaMatch = text.match(/xGA:\s*([\d.]+)/i);
     const goalsMatch = text.match(/(?:Goals|GF):\s*(\d+)/i);
@@ -587,52 +772,83 @@ export async function scrapeTeamXG(teamName: string): Promise<TeamXGStats | null
     const performance = overperforming > 0 ? 'chanceux' : overperforming < 0 ? 'malchanceux' : 'neutre';
     console.log(`✅ xG: ${teamName} - xG:${xG.toFixed(1)} xGA:${xGA.toFixed(1)} (${performance})`);
     
-    return xgStats;
+    return { data: xgStats, error: null, dataSource: 'real' };
     
-  } catch (error) {
-    console.error('Erreur scraping xG:', error);
-    return null;
+  } catch (error: any) {
+    return {
+      data: null,
+      error: createScraperError('unknown', 'FBref', ['xg'], error.message),
+      dataSource: 'none',
+    };
   }
 }
 
 /**
  * Récupère toutes les stats avancées pour un match
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites et la qualité des données
  */
 export async function getAdvancedMatchStats(
   homeTeam: string,
   awayTeam: string
-): Promise<{
-  homeForm: FormGuide | null;
-  awayForm: FormGuide | null;
-  h2h: H2HHistory | null;
-  homeXG: TeamXGStats | null;
-  awayXG: TeamXGStats | null;
-  homeDiscipline: DisciplineStats | null;
-  awayDiscipline: DisciplineStats | null;
-  analysis: {
-    formAdvantage: 'home' | 'away' | 'neutral';
-    xGAdvantage: 'home' | 'away' | 'neutral';
-    disciplineRisk: 'low' | 'medium' | 'high';
-    h2hTrend: string;
-    recommendation: string;
-  };
-}> {
+): Promise<AdvancedMatchStatsResult> {
   console.log(`📊 Récupération stats avancées: ${homeTeam} vs ${awayTeam}`);
   
+  const errors: ScraperError[] = [];
+  let realDataCount = 0;
+  let totalDataTypes = 7; // form x2, h2h, xg x2, discipline x2
+  
   // Récupérer toutes les données en séquence (avec délais pour rate limiting)
-  const homeForm = await scrapeFormGuide(homeTeam);
+  const homeFormResult = await scrapeFormGuide(homeTeam);
+  if (homeFormResult.error) errors.push(homeFormResult.error);
+  if (homeFormResult.data) realDataCount++;
   await delay();
-  const awayForm = await scrapeFormGuide(awayTeam);
+  
+  const awayFormResult = await scrapeFormGuide(awayTeam);
+  if (awayFormResult.error) errors.push(awayFormResult.error);
+  if (awayFormResult.data) realDataCount++;
   await delay();
-  const h2h = await scrapeH2HHistory(homeTeam, awayTeam);
+  
+  const h2hResult = await scrapeH2HHistory(homeTeam, awayTeam);
+  if (h2hResult.error) errors.push(h2hResult.error);
+  if (h2hResult.data) realDataCount++;
   await delay();
-  const homeXG = await scrapeTeamXG(homeTeam);
+  
+  const homeXGResult = await scrapeTeamXG(homeTeam);
+  if (homeXGResult.error) errors.push(homeXGResult.error);
+  if (homeXGResult.data) realDataCount++;
   await delay();
-  const awayXG = await scrapeTeamXG(awayTeam);
+  
+  const awayXGResult = await scrapeTeamXG(awayTeam);
+  if (awayXGResult.error) errors.push(awayXGResult.error);
+  if (awayXGResult.data) realDataCount++;
   await delay();
-  const homeDiscipline = await scrapeDisciplineStats(homeTeam);
+  
+  const homeDisciplineResult = await scrapeDisciplineStats(homeTeam);
+  if (homeDisciplineResult.error) errors.push(homeDisciplineResult.error);
+  if (homeDisciplineResult.data) realDataCount++;
   await delay();
-  const awayDiscipline = await scrapeDisciplineStats(awayTeam);
+  
+  const awayDisciplineResult = await scrapeDisciplineStats(awayTeam);
+  if (awayDisciplineResult.error) errors.push(awayDisciplineResult.error);
+  if (awayDisciplineResult.data) realDataCount++;
+  
+  // Déterminer la qualité globale des données
+  const realDataRatio = realDataCount / totalDataTypes;
+  let dataQuality: 'real' | 'estimated' | 'partial' | 'none';
+  if (realDataRatio >= 0.8) dataQuality = 'real';
+  else if (realDataRatio >= 0.4) dataQuality = 'partial';
+  else if (realDataRatio > 0) dataQuality = 'estimated';
+  else dataQuality = 'none';
+  
+  // Extraction des données
+  const homeForm = homeFormResult.data;
+  const awayForm = awayFormResult.data;
+  const h2h = h2hResult.data;
+  const homeXG = homeXGResult.data;
+  const awayXG = awayXGResult.data;
+  const homeDiscipline = homeDisciplineResult.data;
+  const awayDiscipline = awayDisciplineResult.data;
   
   // Analyse
   let formAdvantage: 'home' | 'away' | 'neutral' = 'neutral';
@@ -665,10 +881,10 @@ export async function getAdvancedMatchStats(
   // Recommandation
   const recommendations: string[] = [];
   
-  if (formAdvantage === 'home') {
-    recommendations.push(`${homeTeam} en meilleure forme (${homeForm?.form})`);
-  } else if (formAdvantage === 'away') {
-    recommendations.push(`${awayTeam} en meilleure forme (${awayForm?.form})`);
+  if (formAdvantage === 'home' && homeForm) {
+    recommendations.push(`${homeTeam} en meilleure forme (${homeForm.form})`);
+  } else if (formAdvantage === 'away' && awayForm) {
+    recommendations.push(`${awayTeam} en meilleure forme (${awayForm.form})`);
   }
   
   if (xGAdvantage === 'home' && homeXG) {
@@ -691,7 +907,13 @@ export async function getAdvancedMatchStats(
     recommendation: recommendations.join('. ') || 'Match équilibré',
   };
   
-  console.log(`✅ Analyse: ${analysis.recommendation}`);
+  // Log des erreurs si présentes
+  if (errors.length > 0) {
+    console.log(`⚠️ ${errors.length} erreur(s) rencontrée(s):`);
+    errors.forEach(e => console.log(`   - ${e.source}: ${e.userMessage}`));
+  }
+  
+  console.log(`✅ Analyse: ${analysis.recommendation} (Qualité: ${dataQuality})`);
   
   return {
     homeForm,
@@ -702,6 +924,8 @@ export async function getAdvancedMatchStats(
     homeDiscipline,
     awayDiscipline,
     analysis,
+    errors,
+    dataQuality,
   };
 }
 

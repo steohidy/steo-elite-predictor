@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MatchCard } from './MatchCard';
-import { Shield, TrendingUp, Sparkles, RefreshCw, CheckCircle } from 'lucide-react';
+import { GlobalDataQualityBanner, DataQualityLevel } from './DataSourceIndicator';
+import { Shield, TrendingUp, Sparkles, RefreshCw, CheckCircle, AlertTriangle, Info } from 'lucide-react';
 import { useState, useEffect, useCallback } from 'react';
 
 interface SafeMatch {
@@ -23,6 +24,24 @@ interface SafeMatch {
     valueBetDetected: boolean;
     valueBetType: string | null;
     confidence: string;
+  };
+  dataQuality?: {
+    overall: DataQualityLevel;
+    overallScore: number;
+    sources: string[];
+    hasRealData: boolean;
+    warnings: string[];
+    errors?: Array<{
+      type: string;
+      message: string;
+      severity: 'critical' | 'warning' | 'info';
+    }>;
+    details: {
+      form: DataQualityLevel;
+      goals: DataQualityLevel;
+      injuries: DataQualityLevel;
+      h2h: DataQualityLevel;
+    };
   };
 }
 
@@ -65,6 +84,29 @@ export function SafesDuJour() {
     fetchSafes();
   };
 
+  // Calculer la qualité globale des données
+  const getOverallDataQuality = (): { quality: DataQualityLevel; realCount: number; estimatedCount: number } => {
+    if (matches.length === 0) {
+      return { quality: 'estimated', realCount: 0, estimatedCount: 0 };
+    }
+    
+    const realCount = matches.filter(m => m.dataQuality?.hasRealData || m.dataQuality?.overall === 'real').length;
+    const estimatedCount = matches.length - realCount;
+    
+    let overallQuality: DataQualityLevel;
+    if (realCount === matches.length) {
+      overallQuality = 'real';
+    } else if (realCount === 0) {
+      overallQuality = 'estimated';
+    } else {
+      overallQuality = 'partial';
+    }
+    
+    return { quality: overallQuality, realCount, estimatedCount };
+  };
+
+  const dataQualityInfo = getOverallDataQuality();
+
   return (
     <section id="safes" className="scroll-mt-20">
       <Card className="overflow-hidden border-green-500/30 bg-gradient-to-br from-card via-card to-green-500/5">
@@ -94,6 +136,17 @@ export function SafesDuJour() {
         </CardHeader>
         
         <CardContent className="p-4 sm:p-6">
+          {/* Indicateur global de qualité des données */}
+          {!loading && matches.length > 0 && (
+            <div className="mb-4">
+              <GlobalDataQualityBanner
+                overallQuality={dataQualityInfo.quality}
+                realDataCount={dataQualityInfo.realCount}
+                estimatedDataCount={dataQualityInfo.estimatedCount}
+              />
+            </div>
+          )}
+
           {loading ? (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {[1, 2, 3].map((i) => (

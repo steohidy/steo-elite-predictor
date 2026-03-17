@@ -11,57 +11,52 @@ import {
   Database,
   Loader2,
   Zap,
-  Wifi,
-  WifiOff
+  AlertTriangle,
+  Info,
+  ChevronDown,
+  ChevronUp,
+  TrendingUp,
+  Clock
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-
-interface ApiStatusItem {
-  provider: string;
-  enabled: boolean;
-}
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 interface QuotaInfo {
-  maxMatchesPerDay: number;
-  cacheDurationMinutes: number;
   monthlyQuota: number;
-  estimatedDailyUsage: number;
-  daysPossible: number;
+  used: number;
+  remaining: number;
+  dailyUsed: number;
+  dailyBudget: number;
 }
 
 interface RealOddsResponse {
   success: boolean;
   message: string;
-  apiStatus?: ApiStatusItem[];
+  source: string;
+  apiStatus?: Array<{ provider: string; enabled: boolean }>;
   quotaInfo?: QuotaInfo;
   stats?: {
     synced: number;
     active: number;
-    maxPerDay: number;
-    apiCallsUsed: number;
   };
   matches?: Array<{
     teams: string;
     sport: string;
     odds: string;
   }>;
-  setupGuide?: Record<string, {
-    name: string;
-    url: string;
-    freeTier: string;
-    envVar: string;
-  }>;
+  lastUpdate?: string;
 }
-
-const providerNames: Record<string, string> = {
-  'the-odds-api': 'Odds API',
-  'api-football': 'Football',
-};
 
 export function ApiStatus() {
   const [status, setStatus] = useState<RealOddsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -92,102 +87,225 @@ export function ApiStatus() {
     }
   };
 
-  const hasRealApi = status?.apiStatus?.some(api => api.enabled);
+  const hasApi = status?.success && status?.quotaInfo && status.quotaInfo.remaining > 10;
+  const quotaPercentage = status?.quotaInfo 
+    ? Math.round((status.quotaInfo.remaining / status.quotaInfo.monthlyQuota) * 100)
+    : 0;
+  const dailyPercentage = status?.quotaInfo 
+    ? Math.round((status.quotaInfo.dailyUsed / status.quotaInfo.dailyBudget) * 100)
+    : 0;
 
-  // Version compacte et ergonomique - une seule ligne
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-card border border-border/50">
-      {/* Gauche: Statut global */}
-      <div className="flex items-center gap-3">
-        {loading ? (
-          <>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              <span className="text-xs font-medium text-muted-foreground">Connexion...</span>
-            </div>
-          </>
-        ) : hasRealApi ? (
-          <>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-green-500/15 border border-green-500/20">
-              <Wifi className="h-3.5 w-3.5 text-green-500" />
-              <span className="text-xs font-semibold text-green-500">API Connectée</span>
-            </div>
-            
+    <div className="rounded-lg bg-card border border-border/50 overflow-hidden">
+      {/* En-tête principal */}
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          {/* Gauche: Statut global */}
+          <div className="flex items-center gap-3">
+            {loading ? (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Connexion...</span>
+              </div>
+            ) : hasApi ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-green-500/15 border border-green-500/30 cursor-help">
+                      <div className="p-1.5 rounded bg-green-500">
+                        <CheckCircle className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                          DONNÉES RÉELLES
+                        </span>
+                        <p className="text-xs text-green-600/70 dark:text-green-400/70">
+                          The Odds API connectée
+                        </p>
+                      </div>
+                      <div className="ml-2 text-right">
+                        <span className="text-lg font-bold text-green-600 dark:text-green-400">
+                          {status?.stats?.active || 0}
+                        </span>
+                        <p className="text-[10px] text-muted-foreground">matchs</p>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <div className="space-y-2 text-xs">
+                      <p className="font-semibold text-green-600">✅ Source: Cotes réelles</p>
+                      <p className="text-muted-foreground">
+                        Les cotes proviennent directement des bookmakers via The Odds API.
+                      </p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-3 px-4 py-2 rounded-lg bg-yellow-500/15 border border-yellow-500/30 cursor-help">
+                      <div className="p-1.5 rounded bg-yellow-500">
+                        <AlertTriangle className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-yellow-600 dark:text-yellow-400">
+                          ESTIMATION
+                        </span>
+                        <p className="text-xs text-yellow-600/70 dark:text-yellow-400/70">
+                          {status?.message || 'Quota limit atteint'}
+                        </p>
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs">
+                    <div className="space-y-2 text-xs">
+                      <p className="font-semibold text-yellow-600">⚠️ Source: Estimation</p>
+                      <p className="text-muted-foreground">
+                        Les cotes sont estimées. Configurez une API pour des données réelles.
+                      </p>
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
+
             {/* Stats rapides */}
-            {status?.stats && (
-              <div className="hidden sm:flex items-center gap-3 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Database className="h-3 w-3" />
-                  {status.stats.synced} matchs
-                </span>
-                <span className="text-green-500">● {status.stats.active} actifs</span>
+            {!loading && hasApi && status?.quotaInfo && (
+              <div className="hidden sm:flex items-center gap-4 text-xs ml-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-muted/50 cursor-help">
+                        <Database className="h-3.5 w-3.5 text-muted-foreground" />
+                        <span>{status.stats?.synced || 0} matchs</span>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Matchs avec cotes réelles</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
             )}
-          </>
-        ) : (
-          <>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-red-500/15 border border-red-500/20">
-              <WifiOff className="h-3.5 w-3.5 text-red-400" />
-              <span className="text-xs font-semibold text-red-400">API Non configurée</span>
-            </div>
-          </>
-        )}
-
-        {/* Providers badges */}
-        {!loading && status?.apiStatus && (
-          <div className="flex items-center gap-1.5">
-            {status.apiStatus.map((api) => (
-              <Badge
-                key={api.provider}
-                variant="outline"
-                className={`text-[10px] px-2 py-0.5 ${
-                  api.enabled 
-                    ? 'bg-green-500/10 text-green-500 border-green-500/20' 
-                    : 'bg-muted text-muted-foreground border-border'
-                }`}
-              >
-                {api.enabled ? (
-                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
-                ) : (
-                  <XCircle className="h-2.5 w-2.5 mr-1" />
-                )}
-                {providerNames[api.provider] || api.provider}
-              </Badge>
-            ))}
           </div>
-        )}
+
+          {/* Droite: Actions */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="h-8"
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Toggle détails */}
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-3 w-full justify-center"
+        >
+          {showDetails ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {showDetails ? 'Masquer les détails' : 'Voir le quota API'}
+        </button>
       </div>
 
-      {/* Droite: Actions */}
-      <div className="flex items-center gap-2">
-        {hasRealApi ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="h-8 text-xs"
-          >
-            {refreshing ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+      {/* Détails du quota */}
+      {showDetails && status?.quotaInfo && (
+        <div className="px-4 pb-4 pt-0 border-t border-border/50">
+          <div className="mt-3 space-y-3">
+            {/* Quota mensuel */}
+            <div className="p-3 rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Quota mensuel</span>
+                </div>
+                <span className="text-sm font-bold">
+                  {status.quotaInfo.remaining} / {status.quotaInfo.monthlyQuota}
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div 
+                  className={`h-full rounded-full transition-all ${
+                    quotaPercentage >= 80 ? 'bg-green-500' :
+                    quotaPercentage >= 40 ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${quotaPercentage}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {status.quotaInfo.used} requêtes utilisées ce mois
+              </p>
+            </div>
+
+            {/* Budget journalier */}
+            <div className="p-3 rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">Budget journalier</span>
+                </div>
+                <span className="text-sm font-bold">
+                  {status.quotaInfo.dailyBudget - status.quotaInfo.dailyUsed} / {status.quotaInfo.dailyBudget}
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2">
+                <div 
+                  className={`h-full rounded-full transition-all ${
+                    dailyPercentage <= 50 ? 'bg-green-500' :
+                    dailyPercentage <= 80 ? 'bg-yellow-500' :
+                    'bg-red-500'
+                  }`}
+                  style={{ width: `${100 - dailyPercentage}%` }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {status.quotaInfo.dailyUsed} requêtes utilisées aujourd'hui
+              </p>
+            </div>
+
+            {/* Dernière mise à jour */}
+            {status.lastUpdate && (
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Dernière mise à jour:</span>
+                <span>{new Date(status.lastUpdate).toLocaleString('fr-FR')}</span>
+              </div>
             )}
-            Sync
-          </Button>
-        ) : status?.setupGuide && (
-          <a
-            href={Object.values(status.setupGuide)[0]?.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Zap className="h-3.5 w-3.5" />
-            Configurer API
-            <ExternalLink className="h-3 w-3" />
-          </a>
-        )}
-      </div>
+
+            {/* Source des données */}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Source:</span>
+              <Badge 
+                variant="outline" 
+                className={hasApi ? 'bg-green-500/10 text-green-600' : 'bg-yellow-500/10 text-yellow-600'}
+              >
+                {hasApi ? 'The Odds API' : 'Cache / Estimation'}
+              </Badge>
+            </div>
+
+            {/* Message d'info */}
+            {status.source === 'cache' && (
+              <div className="p-2 rounded bg-blue-500/10 border border-blue-500/20 text-xs text-blue-600 dark:text-blue-400">
+                <Info className="h-3 w-3 inline mr-1" />
+                Données en cache (rafraîchies toutes les 2h pour économiser le quota)
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
+export default ApiStatus;

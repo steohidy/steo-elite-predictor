@@ -189,11 +189,16 @@ export async function precalculateFootballStats(): Promise<{
         }
         
         // Scrape les stats
-        const [form, xg, discipline] = await Promise.all([
+        const [formResult, xgResult, disciplineResult] = await Promise.all([
           scrapeFormGuide(team),
           scrapeTeamXG(team),
           scrapeDisciplineStats(team),
         ]);
+        
+        // Extraire les données (les scrapers retournent maintenant ScraperResult<T>)
+        const form = formResult.data;
+        const xg = xgResult.data;
+        const discipline = disciplineResult.data;
         
         // Stocker en cache
         const now = new Date();

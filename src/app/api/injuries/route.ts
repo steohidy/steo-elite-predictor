@@ -13,6 +13,8 @@ import {
  * - sport: 'Foot' | 'Basket' | 'all' (défaut: all)
  * - team: nom de l'équipe spécifique
  * - homeTeam + awayTeam: calculer l'impact sur un match
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites et la qualité des données
  */
 export async function GET(request: Request) {
   try {
@@ -31,7 +33,18 @@ export async function GET(request: Request) {
         homeTeam,
         awayTeam,
         sport: matchSport,
-        ...impact,
+        homeInjuries: impact.homeInjuries,
+        awayInjuries: impact.awayInjuries,
+        impactLevel: impact.impactLevel,
+        homeOut: impact.homeOut,
+        awayOut: impact.awayOut,
+        errors: impact.errors.map(e => ({
+          source: e.source,
+          message: e.userMessage,
+          solution: e.solution,
+          severity: e.severity,
+        })),
+        dataQuality: impact.dataQuality,
         scrapedAt: new Date().toISOString(),
       });
     }
@@ -39,67 +52,99 @@ export async function GET(request: Request) {
     // Si on demande une équipe spécifique
     if (team) {
       const teamSport = (sport === 'Basket' ? 'Basket' : 'Foot') as 'Foot' | 'Basket';
-      const injuries = await getTeamInjuries(team, teamSport);
+      const result = await getTeamInjuries(team, teamSport);
       
       return NextResponse.json({
         team,
         sport: teamSport,
-        injuries: injuries || { team, sport: teamSport, injuries: [], lastUpdated: null },
+        injuries: result.data || { team, sport: teamSport, injuries: [], lastUpdated: null },
+        error: result.error ? {
+          source: result.error.source,
+          message: result.error.userMessage,
+          solution: result.error.solution,
+          severity: result.error.severity,
+        } : null,
+        dataSource: result.dataSource,
         scrapedAt: new Date().toISOString(),
       });
     }
     
     // Récupérer toutes les blessures
     if (sport === 'Basket') {
-      const nba = await scrapeNBAInjuries();
-      const injuriesArray = Array.from(nba.values());
+      const { injuries, errors } = await scrapeNBAInjuries();
+      const injuriesArray = Array.from(injuries.values());
       
       return NextResponse.json({
         sport: 'Basket',
         source: 'NBA Official Injury Report',
         teams: injuriesArray,
-        totalInjuries: injuriesArray.reduce((sum, t) => sum + t.injuries.length, 0),
+        totalInjuries: injuriesArray.reduce((sum: number, t) => sum + t.injuries.length, 0),
+        errors: errors.map(e => ({
+          source: e.source,
+          message: e.userMessage,
+          solution: e.solution,
+          severity: e.severity,
+        })),
+        dataQuality: injuries.size > 0 ? 'real' : 'none',
         scrapedAt: new Date().toISOString(),
       });
     }
     
     if (sport === 'Foot') {
-      const football = await scrapeFootballInjuries();
-      const injuriesArray = Array.from(football.values());
+      const { injuries, errors } = await scrapeFootballInjuries();
+      const injuriesArray = Array.from(injuries.values());
       
       return NextResponse.json({
         sport: 'Foot',
         source: 'Transfermarkt',
         teams: injuriesArray,
-        totalInjuries: injuriesArray.reduce((sum, t) => sum + t.injuries.length, 0),
+        totalInjuries: injuriesArray.reduce((sum: number, t) => sum + t.injuries.length, 0),
+        errors: errors.map(e => ({
+          source: e.source,
+          message: e.userMessage,
+          solution: e.solution,
+          severity: e.severity,
+        })),
+        dataQuality: injuries.size > 0 ? 'real' : 'none',
         scrapedAt: new Date().toISOString(),
       });
     }
     
     // Tous les sports
-    const [football, nba] = await Promise.all([
+    const [footballResult, nbaResult] = await Promise.all([
       scrapeFootballInjuries(),
       scrapeNBAInjuries(),
     ]);
     
-    const footballArray = Array.from(football.values());
-    const nbaArray = Array.from(nba.values());
+    const footballArray = Array.from(footballResult.injuries.values());
+    const nbaArray = Array.from(nbaResult.injuries.values());
+    const allErrors = [...footballResult.errors, ...nbaResult.errors];
     
     return NextResponse.json({
       football: {
         source: 'Transfermarkt',
         teams: footballArray,
-        totalInjuries: footballArray.reduce((sum, t) => sum + t.injuries.length, 0),
+        totalInjuries: footballArray.reduce((sum: number, t) => sum + t.injuries.length, 0),
+        dataQuality: footballResult.injuries.size > 0 ? 'real' : 'none',
       },
       nba: {
         source: 'NBA Official Injury Report',
         teams: nbaArray,
-        totalInjuries: nbaArray.reduce((sum, t) => sum + t.injuries.length, 0),
+        totalInjuries: nbaArray.reduce((sum: number, t) => sum + t.injuries.length, 0),
+        dataQuality: nbaResult.injuries.size > 0 ? 'real' : 'none',
       },
+      errors: allErrors.map(e => ({
+        source: e.source,
+        message: e.userMessage,
+        solution: e.solution,
+        severity: e.severity,
+      })),
       summary: {
         totalTeams: footballArray.length + nbaArray.length,
-        totalInjuries: footballArray.reduce((sum, t) => sum + t.injuries.length, 0) +
-                       nbaArray.reduce((sum, t) => sum + t.injuries.length, 0),
+        totalInjuries: footballArray.reduce((sum: number, t) => sum + t.injuries.length, 0) +
+                       nbaArray.reduce((sum: number, t) => sum + t.injuries.length, 0),
+        hasErrors: allErrors.length > 0,
+        dataQuality: footballResult.injuries.size > 0 || nbaResult.injuries.size > 0 ? 'partial' : 'none',
       },
       scrapedAt: new Date().toISOString(),
     });
@@ -108,7 +153,8 @@ export async function GET(request: Request) {
     console.error('Erreur API injuries:', error);
     return NextResponse.json({ 
       error: 'Erreur lors de la récupération des blessures',
-      details: error instanceof Error ? error.message : 'Unknown error'
+      details: error instanceof Error ? error.message : 'Unknown error',
+      solution: 'Réessayez ultérieurement ou utilisez les données estimées',
     }, { status: 500 });
   }
 }

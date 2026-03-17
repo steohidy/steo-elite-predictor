@@ -6,9 +6,18 @@
  * - NBA: official.nba.com/nba-injury-report
  * 
  * GRATUIT - Données officielles à jour
+ * 
+ * AMÉLIORÉ: Messages d'erreur explicites et indicateur de qualité
  */
 
 import ZAI from 'z-ai-web-dev-sdk';
+import { 
+  ScraperError, 
+  ScraperErrorType,
+  createScraperError, 
+  detectErrorType,
+  formatErrorForLog 
+} from './scraperErrorHandler';
 
 // Types
 export interface InjuryInfo {
@@ -26,6 +35,8 @@ export interface TeamInjuries {
   sport: 'Foot' | 'Basket';
   injuries: InjuryInfo[];
   lastUpdated: string;
+  dataSource: 'real' | 'estimated' | 'none';
+  errors?: ScraperError[];
 }
 
 // Cache
@@ -131,11 +142,17 @@ function parseInjuryStatus(status: string): 'out' | 'doubtful' | 'probable' | 'd
 
 /**
  * Scrape les blessures NBA depuis le rapport officiel
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
-export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
+export async function scrapeNBAInjuries(): Promise<{
+  injuries: Map<string, TeamInjuries>;
+  errors: ScraperError[];
+}> {
   console.log('🏀 Scraping blessures NBA (official.nba.com)...');
   
   const injuries = new Map<string, TeamInjuries>();
+  const errors: ScraperError[] = [];
   
   try {
     const zai = await ZAI.create();
@@ -144,16 +161,52 @@ export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
       url: NBA_INJURY_URL
     });
     
-    if (result.code !== 200 || !result.data?.html) {
-      console.log('⚠️ Erreur accès NBA Injury Report');
-      return injuries;
+    // Détection des erreurs
+    if (result.code !== 200) {
+      const errorType = detectErrorType(result, 'NBA Official');
+      const error = createScraperError(
+        errorType,
+        'NBA Official Injury Report',
+        ['nba_injuries'],
+        `Erreur HTTP ${result.code}: Accès refusé`
+      );
+      errors.push(error);
+      console.warn(`⚠️ ${formatErrorForLog(error)}`);
+      
+      // Retourner avec données estimées vides
+      return { injuries, errors };
+    }
+    
+    if (!result.data?.html) {
+      const error = createScraperError(
+        'javascript_rendering',
+        'NBA Official Injury Report',
+        ['nba_injuries'],
+        'Le site NBA nécessite JavaScript pour afficher les données'
+      );
+      errors.push(error);
+      console.warn(`⚠️ ${formatErrorForLog(error)}`);
+      
+      return { injuries, errors };
     }
     
     const html = result.data.html;
+    
+    // Vérifier si le HTML est trop court (indique un problème de rendu)
+    if (html.length < 5000) {
+      const error = createScraperError(
+        'javascript_rendering',
+        'NBA Official Injury Report',
+        ['nba_injuries'],
+        'Contenu insuffisant - JavaScript probablement requis'
+      );
+      errors.push(error);
+      console.warn(`⚠️ ${formatErrorForLog(error)}`);
+    }
+    
     const text = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
     
     // Parser les blessures (format typique du rapport NBA)
-    // Patterns: "Player Name - Team - Injury - Status"
     const patterns = [
       /([A-Z][a-z]+ [A-Z][a-z]+)\s*[-–]\s*([A-Z]{2,3})\s*[-–]\s*([^–]+)\s*[-–]\s*(Out|Doubtful|Probable|Day-to-Day)/gi,
       /([A-Z][a-z]+ [A-Z][a-z]+)\s+\(([A-Z]{2,3})\)\s*[-–]?\s*([^,]+),\s*(Out|Doubtful|Probable)/gi,
@@ -184,6 +237,8 @@ export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
             sport: 'Basket',
             injuries: [],
             lastUpdated: new Date().toISOString(),
+            dataSource: 'real',
+            errors: [],
           });
         }
         
@@ -193,7 +248,6 @@ export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
     
     // Méthode alternative: chercher les tableaux
     if (injuries.size === 0) {
-      // Parser les lignes de tableau typiques
       const rows = html.match(/<tr[^>]*>[\s\S]*?<\/tr>/gi) || [];
       
       for (const row of rows) {
@@ -222,6 +276,8 @@ export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
                 sport: 'Basket',
                 injuries: [],
                 lastUpdated: new Date().toISOString(),
+                dataSource: 'real',
+                errors: [],
               });
             }
             
@@ -232,23 +288,46 @@ export async function scrapeNBAInjuries(): Promise<Map<string, TeamInjuries>> {
     }
     
     cachedNBAInjuries = injuries;
-    console.log(`✅ NBA Injuries: ${injuries.size} équipes avec blessures`);
     
-    return injuries;
+    if (injuries.size === 0 && errors.length === 0) {
+      console.log('ℹ️ Aucune blessure NBA trouvée (normal si pas de rapports actifs)');
+    } else {
+      console.log(`✅ NBA Injuries: ${injuries.size} équipes avec blessures`);
+    }
     
-  } catch (error) {
-    console.error('Erreur scraping NBA injuries:', error);
-    return injuries;
+    if (errors.length > 0) {
+      console.log(`⚠️ ${errors.length} erreur(s) rencontrée(s)`);
+    }
+    
+    return { injuries, errors };
+    
+  } catch (error: any) {
+    const scraperError = createScraperError(
+      'unknown',
+      'NBA Official Injury Report',
+      ['nba_injuries'],
+      error.message
+    );
+    errors.push(scraperError);
+    console.error('❌ Erreur scraping NBA injuries:', error.message);
+    
+    return { injuries, errors };
   }
 }
 
 /**
  * Scrape les blessures Football depuis Transfermarkt
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs explicites
  */
-export async function scrapeFootballInjuries(): Promise<Map<string, TeamInjuries>> {
+export async function scrapeFootballInjuries(): Promise<{
+  injuries: Map<string, TeamInjuries>;
+  errors: ScraperError[];
+}> {
   console.log('⚽ Scraping blessures Football (Transfermarkt)...');
   
   const injuries = new Map<string, TeamInjuries>();
+  const errors: ScraperError[] = [];
   
   try {
     const zai = await ZAI.create();
@@ -262,20 +341,52 @@ export async function scrapeFootballInjuries(): Promise<Map<string, TeamInjuries
           url
         });
         
-        if (result.code !== 200 || !result.data?.html) {
-          console.log(`  ⚠️ ${league}: erreur accès`);
+        // Détection des erreurs
+        if (result.code !== 200) {
+          const errorType = detectErrorType(result, 'Transfermarkt');
+          const error = createScraperError(
+            errorType,
+            `Transfermarkt ${league}`,
+            ['football_injuries', league.toLowerCase()],
+            `Erreur HTTP ${result.code} - Accès bloqué`
+          );
+          errors.push(error);
+          console.warn(`    ⚠️ ${error.userMessage}`);
+          continue;
+        }
+        
+        if (!result.data?.html) {
+          const error = createScraperError(
+            'invalid_response',
+            `Transfermarkt ${league}`,
+            ['football_injuries'],
+            'Pas de données HTML reçues'
+          );
+          errors.push(error);
+          console.warn(`    ⚠️ ${error.userMessage}`);
           continue;
         }
         
         const html = result.data.html;
         
+        // Vérifier Cloudflare
+        if (html.includes('cloudflare') || html.includes('challenge-platform') || html.length < 3000) {
+          const error = createScraperError(
+            'cloudflare_blocked',
+            `Transfermarkt ${league}`,
+            ['football_injuries'],
+            'Cloudflare a bloqué l\'accès - protection anti-bot active'
+          );
+          errors.push(error);
+          console.warn(`    ⚠️ ${error.userMessage}`);
+          continue;
+        }
+        
         // Parser les blessures Transfermarkt
-        // Format typique: tableau avec joueur, équipe, blessure, retour
         const rows = html.match(/<tr[^>]*class="[^"]*odd[^"]*"[\s\S]*?<\/tr>|<tr[^>]*class="[^"]*even[^"]*"[\s\S]*?<\/tr>/gi) || [];
         
         for (const row of rows) {
           try {
-            // Extraire les cellules
             const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
             
             if (cells.length >= 3) {
@@ -303,6 +414,8 @@ export async function scrapeFootballInjuries(): Promise<Map<string, TeamInjuries
                     sport: 'Foot',
                     injuries: [],
                     lastUpdated: new Date().toISOString(),
+                    dataSource: 'real',
+                    errors: [],
                   });
                 }
                 
@@ -317,29 +430,59 @@ export async function scrapeFootballInjuries(): Promise<Map<string, TeamInjuries
         // Délai entre les requêtes
         await new Promise(resolve => setTimeout(resolve, 500));
         
-      } catch (e) {
-        console.log(`  ⚠️ ${league}: erreur`);
+      } catch (e: any) {
+        const error = createScraperError(
+          'unknown',
+          `Transfermarkt ${league}`,
+          ['football_injuries'],
+          e.message
+        );
+        errors.push(error);
+        console.warn(`    ⚠️ Erreur: ${e.message}`);
       }
     }
     
     cachedFootballInjuries = injuries;
-    console.log(`✅ Football Injuries: ${injuries.size} équipes avec blessures`);
     
-    return injuries;
+    if (injuries.size === 0) {
+      console.log('⚠️ Aucune blessure Football récupérée');
+      if (errors.length > 0) {
+        console.log('📋 Raisons:');
+        errors.forEach(e => console.log(`   - ${e.source}: ${e.userMessage}`));
+      }
+    } else {
+      console.log(`✅ Football Injuries: ${injuries.size} équipes avec blessures`);
+    }
     
-  } catch (error) {
-    console.error('Erreur scraping Football injuries:', error);
-    return injuries;
+    return { injuries, errors };
+    
+  } catch (error: any) {
+    const scraperError = createScraperError(
+      'unknown',
+      'Transfermarkt',
+      ['football_injuries'],
+      error.message
+    );
+    errors.push(scraperError);
+    console.error('❌ Erreur scraping Football injuries:', error.message);
+    
+    return { injuries, errors };
   }
 }
 
 /**
  * Récupère les blessures pour une équipe spécifique
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs et la source des données
  */
 export async function getTeamInjuries(
   teamName: string,
   sport: 'Foot' | 'Basket'
-): Promise<TeamInjuries | null> {
+): Promise<{
+  data: TeamInjuries | null;
+  error: ScraperError | null;
+  dataSource: 'real' | 'estimated' | 'none';
+}> {
   // Vérifier le cache
   const cache = sport === 'Basket' ? cachedNBAInjuries : cachedFootballInjuries;
   
@@ -350,40 +493,75 @@ export async function getTeamInjuries(
   for (const [team, data] of cache) {
     if (team.toLowerCase().includes(normalizedName.toLowerCase()) ||
         normalizedName.toLowerCase().includes(team.toLowerCase())) {
-      return data;
+      return { data, error: null, dataSource: data.dataSource };
     }
   }
   
   // Si pas en cache, scraper
   if (sport === 'Basket') {
-    await scrapeNBAInjuries();
-    const nbaCache = cachedNBAInjuries;
-    for (const [team, data] of nbaCache) {
+    const { injuries, errors } = await scrapeNBAInjuries();
+    for (const [team, data] of injuries) {
       if (team.toLowerCase().includes(normalizedName.toLowerCase()) ||
           normalizedName.toLowerCase().includes(team.toLowerCase())) {
-        return data;
+        return { 
+          data, 
+          error: errors[0] || null, 
+          dataSource: data.dataSource 
+        };
       }
     }
+    // Aucune donnée trouvée
+    return {
+      data: null,
+      error: createScraperError(
+        'not_found',
+        'NBA Official',
+        ['injuries'],
+        `Aucune blessure trouvée pour ${teamName}`
+      ),
+      dataSource: 'none',
+    };
   } else {
-    await scrapeFootballInjuries();
-    const footCache = cachedFootballInjuries;
-    for (const [team, data] of footCache) {
+    const { injuries, errors } = await scrapeFootballInjuries();
+    for (const [team, data] of injuries) {
       if (team.toLowerCase().includes(normalizedName.toLowerCase()) ||
           normalizedName.toLowerCase().includes(team.toLowerCase())) {
-        return data;
+        return { 
+          data, 
+          error: errors[0] || null, 
+          dataSource: data.dataSource 
+        };
       }
     }
+    // Aucune donnée trouvée
+    return {
+      data: null,
+      error: createScraperError(
+        'not_found',
+        'Transfermarkt',
+        ['injuries'],
+        `Aucune blessure trouvée pour ${teamName}`
+      ),
+      dataSource: 'none',
+    };
   }
-  
-  return null;
 }
 
 /**
  * Récupère toutes les blessures (Foot + NBA)
+ * 
+ * AMÉLIORÉ: Retourne maintenant les erreurs et statistiques
  */
 export async function getAllInjuries(): Promise<{
   football: Map<string, TeamInjuries>;
   nba: Map<string, TeamInjuries>;
+  errors: ScraperError[];
+  stats: {
+    footballTeams: number;
+    nbaTeams: number;
+    totalErrors: number;
+    hasRealData: boolean;
+  };
 }> {
   const now = Date.now();
   
@@ -395,18 +573,37 @@ export async function getAllInjuries(): Promise<{
     return {
       football: cachedFootballInjuries,
       nba: cachedNBAInjuries,
+      errors: [],
+      stats: {
+        footballTeams: cachedFootballInjuries.size,
+        nbaTeams: cachedNBAInjuries.size,
+        totalErrors: 0,
+        hasRealData: true,
+      },
     };
   }
   
   // Scrape en parallèle
-  const [football, nba] = await Promise.all([
+  const [footballResult, nbaResult] = await Promise.all([
     scrapeFootballInjuries(),
     scrapeNBAInjuries(),
   ]);
   
+  const allErrors = [...footballResult.errors, ...nbaResult.errors];
+  
   lastScrapeTime = now;
   
-  return { football, nba };
+  return {
+    football: footballResult.injuries,
+    nba: nbaResult.injuries,
+    errors: allErrors,
+    stats: {
+      footballTeams: footballResult.injuries.size,
+      nbaTeams: nbaResult.injuries.size,
+      totalErrors: allErrors.length,
+      hasRealData: footballResult.injuries.size > 0 || nbaResult.injuries.size > 0,
+    },
+  };
 }
 
 /**
@@ -430,8 +627,10 @@ export function formatInjuriesForDisplay(teamInjuries: TeamInjuries): string[] {
 
 /**
  * Calcule l'impact des blessures sur un match
+ * 
+ * AMÉLIORÉ: Inclut maintenant les erreurs et la source des données
  */
-export function calculateInjuryImpact(
+export async function calculateInjuryImpact(
   homeTeam: string,
   awayTeam: string,
   sport: 'Foot' | 'Basket'
@@ -441,48 +640,67 @@ export function calculateInjuryImpact(
   impactLevel: 'low' | 'medium' | 'high';
   homeOut: string[];
   awayOut: string[];
+  errors: ScraperError[];
+  dataQuality: 'real' | 'estimated' | 'none';
 }> {
-  return new Promise(async (resolve) => {
-    const result = {
-      homeInjuries: 0,
-      awayInjuries: 0,
-      impactLevel: 'low' as 'low' | 'medium' | 'high',
-      homeOut: [] as string[],
-      awayOut: [] as string[],
-    };
+  const result = {
+    homeInjuries: 0,
+    awayInjuries: 0,
+    impactLevel: 'low' as 'low' | 'medium' | 'high',
+    homeOut: [] as string[],
+    awayOut: [] as string[],
+    errors: [] as ScraperError[],
+    dataQuality: 'none' as 'real' | 'estimated' | 'none',
+  };
+  
+  try {
+    const homeResult = await getTeamInjuries(homeTeam, sport);
+    const awayResult = await getTeamInjuries(awayTeam, sport);
     
-    try {
-      const homeData = await getTeamInjuries(homeTeam, sport);
-      const awayData = await getTeamInjuries(awayTeam, sport);
-      
-      if (homeData) {
-        result.homeInjuries = homeData.injuries.length;
-        result.homeOut = homeData.injuries
-          .filter(i => i.status === 'out')
-          .map(i => i.player);
-      }
-      
-      if (awayData) {
-        result.awayInjuries = awayData.injuries.length;
-        result.awayOut = awayData.injuries
-          .filter(i => i.status === 'out')
-          .map(i => i.player);
-      }
-      
-      // Calculer l'impact
-      const totalOut = result.homeOut.length + result.awayOut.length;
-      if (totalOut >= 4) {
-        result.impactLevel = 'high';
-      } else if (totalOut >= 2) {
-        result.impactLevel = 'medium';
-      }
-      
-    } catch (e) {
-      console.error('Erreur calcul impact blessures:', e);
+    // Collecter les erreurs
+    if (homeResult.error) result.errors.push(homeResult.error);
+    if (awayResult.error) result.errors.push(awayResult.error);
+    
+    // Déterminer la qualité des données
+    if (homeResult.dataSource === 'real' || awayResult.dataSource === 'real') {
+      result.dataQuality = 'real';
+    } else if (homeResult.dataSource === 'estimated' || awayResult.dataSource === 'estimated') {
+      result.dataQuality = 'estimated';
     }
     
-    resolve(result);
-  });
+    if (homeResult.data) {
+      result.homeInjuries = homeResult.data.injuries.length;
+      result.homeOut = homeResult.data.injuries
+        .filter(i => i.status === 'out')
+        .map(i => i.player);
+    }
+    
+    if (awayResult.data) {
+      result.awayInjuries = awayResult.data.injuries.length;
+      result.awayOut = awayResult.data.injuries
+        .filter(i => i.status === 'out')
+        .map(i => i.player);
+    }
+    
+    // Calculer l'impact
+    const totalOut = result.homeOut.length + result.awayOut.length;
+    if (totalOut >= 4) {
+      result.impactLevel = 'high';
+    } else if (totalOut >= 2) {
+      result.impactLevel = 'medium';
+    }
+    
+  } catch (e: any) {
+    result.errors.push(createScraperError(
+      'unknown',
+      'Injury Calculator',
+      ['injuries'],
+      e.message
+    ));
+    console.error('Erreur calcul impact blessures:', e);
+  }
+  
+  return result;
 }
 
 /**
@@ -505,8 +723,5 @@ const InjuryScraper = {
   calculateInjuryImpact,
   clearCache: clearInjuryCache,
 };
-
-// Export named pour utilisation directe
-export { InjuryScraper };
 
 export default InjuryScraper;
