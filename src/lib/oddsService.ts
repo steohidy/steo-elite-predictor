@@ -10,7 +10,7 @@
  */
 
 import { fetchAllESPNMatches, ESPNMatch } from './espnService';
-import { fetchBetExplorerOdds, getMatchOdds, BetExplorerMatch } from './betExplorerService';
+import { betExplorerService, BetExplorerOdds } from './betExplorerService';
 import { scrapeTodayOdds, findMatchOdds, RealOdds } from './betExplorerScraper';
 
 // Types exportés
