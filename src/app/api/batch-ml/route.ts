@@ -6,6 +6,7 @@ import {
   clearBatchCache 
 } from '@/lib/batchPreCalculation';
 import { trainModel, getAdaptiveThresholds, getModelStatus, resetModel } from '@/lib/adaptiveThresholdsML';
+import { trainModel as trainModelSupabase, TrainingConfig } from '@/lib/mlPipeline';
 import { calculateStats, getStats } from '@/lib/predictionTracker';
 
 /**
@@ -17,7 +18,8 @@ import { calculateStats, getStats } from '@/lib/predictionTracker';
  * 
  * Actions POST:
  * - action=precalc: Pré-calculer toutes les stats
- * - action=train: Entraîner le modèle ML
+ * - action=train: Entraîner le modèle ML (ancien)
+ * - action=train_supabase: Entraîner avec données Supabase (nouveau)
  * - action=stats: Calculer les statistiques de prédictions
  * - action=force_update: Forcer la mise à jour du cache
  * - action=reset_ml: Réinitialiser le modèle ML
@@ -69,11 +71,30 @@ export async function POST(request: Request) {
       }
       
       case 'train': {
-        // Entraîner le modèle ML
+        // Entraîner le modèle ML (ancien)
         const result = trainModel();
         return NextResponse.json({
           success: result.success,
           message: result.success ? 'Entraînement terminé' : 'Pas assez de données',
+          result,
+        });
+      }
+      
+      case 'train_supabase': {
+        // Entraîner avec les données Supabase (nouveau)
+        const config: TrainingConfig = {
+          season: '2024-2025',
+          sport: 'football',
+          testSplit: 0.2,
+          minMatchesPerTeam: 5
+        };
+        
+        const result = await trainModelSupabase(config);
+        return NextResponse.json({
+          success: result.success,
+          message: result.success 
+            ? `Entraînement terminé - Accuracy: ${result.accuracy.toFixed(1)}%, ROI: ${result.roi_percent.toFixed(1)}%` 
+            : result.message || 'Erreur lors de l\'entraînement',
           result,
         });
       }
@@ -117,7 +138,7 @@ export async function POST(request: Request) {
       default:
         return NextResponse.json({
           error: 'Action non reconnue',
-          availableActions: ['precalc', 'train', 'stats', 'force_update', 'reset_ml', 'clear_cache'],
+          availableActions: ['precalc', 'train', 'train_supabase', 'stats', 'force_update', 'reset_ml', 'clear_cache'],
         }, { status: 400 });
     }
     

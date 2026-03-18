@@ -3,19 +3,39 @@
  * Base de données PostgreSQL pour stocker les matchs historiques
  */
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 // Configuration Supabase
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // Vérifier si Supabase est configuré
-export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
+export const isSupabaseConfigured = !!(supabaseUrl && (supabaseAnonKey || supabaseServiceKey));
 
-// Client Supabase
+// Client Supabase pour opérations publiques (lecture seule)
 export const supabase = isSupabaseConfigured 
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createClient(supabaseUrl, supabaseAnonKey || supabaseServiceKey)
   : null;
+
+// Client Supabase Admin pour opérations serveur (insert, update, delete)
+// Utilise la clé service_role pour contourner RLS
+let _supabaseAdmin: SupabaseClient | null = null;
+
+export function getSupabaseAdmin(): SupabaseClient | null {
+  if (!supabaseUrl || !supabaseServiceKey) return null;
+  
+  if (!_supabaseAdmin) {
+    _supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+  }
+  
+  return _supabaseAdmin;
+}
 
 // ===== TYPES =====
 

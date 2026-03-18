@@ -8,7 +8,7 @@
  * - Calcul des métriques de performance
  */
 
-import { supabase, isSupabaseConfigured, TABLES, FootballMatch, MLModelMetrics } from './supabase';
+import { supabase, isSupabaseConfigured, getSupabaseAdmin, TABLES, FootballMatch, MLModelMetrics } from './supabase';
 
 // ===== TYPES =====
 
@@ -508,10 +508,26 @@ export async function trainModel(config: TrainingConfig): Promise<TrainingResult
 }
 
 async function saveModelMetrics(metrics: MLModelMetrics): Promise<void> {
-  if (!supabase) return;
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) return;
 
   try {
-    await supabase.from(TABLES.ML_METRICS).insert(metrics);
+    // Adapter au schéma Supabase existant avec les champs requis
+    const dbMetrics = {
+      model_version: metrics.model_version,
+      sport: 'football',
+      accuracy: metrics.accuracy,
+      home_accuracy: metrics.home_accuracy,
+      draw_accuracy: metrics.draw_accuracy,
+      away_accuracy: metrics.away_accuracy,
+      brier_score: metrics.brier_score,
+      roi_percent: metrics.roi_percent,
+      total_predictions: metrics.total_predictions,
+      training_date: metrics.training_date,
+      data_range_start: '2024-08-01',
+      data_range_end: '2025-05-01'
+    };
+    await adminClient.from(TABLES.ML_METRICS).insert(dbMetrics);
   } catch (err) {
     console.error('Erreur sauvegarde métriques:', err);
   }
