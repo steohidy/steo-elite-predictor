@@ -8,13 +8,13 @@
  */
 
 import { supabase, isSupabaseConfigured, FootballMatch, BasketballMatch, TABLES, generateMatchId, formatDateForDB, getMatchResult } from './supabase';
-import { trainModel, TrainingConfig } from './mlPipeline';
+import { trainModel, TrainingConfig, TrainingResult } from './mlPipeline';
 
 // ===== TYPES =====
 
 export interface CronJobResult {
   success: boolean;
-  action: 'initial_scrape' | 'daily_update' | 'ml_training' | 'verification' | 'nba_scrape';
+  action: 'initial_scrape' | 'daily_update' | 'ml_training' | 'verification' | 'nba_scrape' | 'all';
   matchesAdded: number;
   matchesUpdated: number;
   trainingTriggered?: boolean;
@@ -137,7 +137,7 @@ export async function runInitialScrape(): Promise<CronJobResult> {
 
     // ===== ENTRAÎNEMENT AUTOMATIQUE =====
     let trainingTriggered = false;
-    let trainingResult = undefined;
+    let trainingResult: TrainingResult | undefined = undefined;
     
     if (matchesAdded > 100) {
       console.log('\n🤖 Lancement automatique de l\'entraînement ML...');
@@ -381,7 +381,7 @@ export async function getDatabaseStats(): Promise<{
       .from('football_matches')
       .select('league_name');
     
-    const uniqueLeagues = [...new Set(leagues?.map(l => l.league_name) || [])];
+    const uniqueLeagues: string[] = [...new Set(leagues?.map((l: any) => l.league_name) || [])];
 
     return {
       footballMatches: footballCount || 0,
