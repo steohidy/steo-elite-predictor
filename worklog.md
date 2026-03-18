@@ -1370,3 +1370,25 @@ Stage Summary:
   - data/tennis-players.json
   - data/tennis-predictions.json
   - data/tennis-matches-history.json
+
+---
+Task ID: 4
+Agent: Main Assistant
+Task: Intégration The Odds API + Gestion Quota + Documentation
+
+Work Log:
+- Test de la clé The Odds API (fcf0d3cbc8958a44007b0520751f8431) - FONCTIONNE
+- Création de oddsApiManager.ts avec gestion intelligente du quota (500/mois, 15/jour)
+- Création de combinedDataService.ts pour fusionner ESPN + Odds API
+- Mise à jour de l'API matches pour utiliser les vraies cotes
+- Création des composants DataSourceIndicator et ErrorAlertBanner
+- Test de l'API SportMonks - NON RECOMMANDÉ (plan gratuit inutilisable)
+- Compilation réussie
+- Guide de déploiement créé dans /download/DEPLOYMENT_GUIDE.md
+
+Stage Summary:
+- The Odds API configurée et fonctionnelle (498 requêtes restantes)
+- Système de gestion de quota intelligent (cache 2h, budget 15/jour)
+- Indicateurs qualité des données (RÉEL vs ESTIMATION)
+- Documentation complète des APIs manquantes pour analyses pointues
+- Déploiement: nécessite git push manuel (pas de credentials GitHub)
